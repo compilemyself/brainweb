@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useContext } from "react";
+import { AuthContext } from "../context/AuthContext";
+import * as api from "../services/api";
 
 // Bloco de CSS responsável por centralizar toda identidade visual da landing page. 
 // Define características dos elementos como fonte, cores, animações, etc.
@@ -217,6 +219,10 @@ const styles = `
 // Componente principal da tela de login/registro. Controla a navegação entre as telas "home" (login) e "register",
 // além do estado de expansão do formulário de login, do checkbox "manter-me conectado" e da chave de animação.
 export default function LoginScreen() {
+  const { user, login } = useContext(AuthContext);
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+
   const [screen, setScreen] = useState("home");
   const [loginOpen, setLoginOpen] = useState(false);
   const [keepLogged, setKeepLogged] = useState(false);
@@ -265,21 +271,25 @@ export default function LoginScreen() {
     React.createElement("style", null, styles),
     React.createElement("div", { className: "root" },
       React.createElement("div", { className: "card" },
-
-        React.createElement("p", { className: "greeting" }, "Olá, Anônimo."),
+  // "Olá, {nome de usuário}." (padrão: Anônimo)
+        React.createElement("p",
+    { className: "greeting" },
+    "Olá, ", user ? user.nome : "Anônimo",
+"."),
 
         React.createElement("div", { className: "btn-group" },
 
           // exibir botão "fazer login" ou formulário de login expandido
           loginOpen
             ? React.createElement("div", { className: "login-expand", key: "expand-" + animKey },
-                React.createElement("input", { className: "input-field", type: "email", placeholder: "e-mail", autoComplete: "email", autoFocus: true }),
-                React.createElement("input", { className: "input-field last", type: "password", placeholder: "senha", autoComplete: "current-password" }),
+              React.createElement("input", {className: "input-field", type: "email", placeholder: "e-mail", autoComplete: "email", autoFocus: true, value: email, onChange: function (e) { setEmail(e.target.value); }}),
+              React.createElement("input", {className: "input-field last", type: "password", placeholder: "senha", autoComplete: "current-password", value: senha, onChange: function (e) { setSenha(e.target.value); }}),
                 React.createElement("div", { className: "checkbox-row", onClick: function() { setKeepLogged(function(v) { return !v; }); } },
-                  React.createElement("div", { className: "checkbox-box" + (keepLogged ? " checked" : "") }, keepLogged ? "✓" : ""),
-                  React.createElement("span", { className: "checkbox-label" }, "manter-me conectado")
-                ),
-                React.createElement("button", { className: "btn primary login-submit" }, "entrar"),
+                React.createElement("div", { className: "checkbox-box" + (keepLogged ? " checked" : "") }, keepLogged ? "✓" : ""),
+                React.createElement("span", { className: "checkbox-label" }, "manter-me conectado")),
+
+                React.createElement("button", {className: "btn primary login-submit", onClick: async function () {try {const data = await api.login(email, senha); login(data, keepLogged);}
+                catch (err) {alert("Erro de conexão com servidor");}}}, "entrar"),
                 React.createElement("button", { className: "register-link", onClick: goRegister }, "cadastre-se para salvar seu progresso.")
               )
             : React.createElement("button", { className: "btn primary", onClick: handleLoginClick }, "fazer login"),

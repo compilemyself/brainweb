@@ -1,0 +1,128 @@
+O desenvolvimento do BrainWeb é parte do Projeto Integrador III-B da UCPEL (Universidade Católica de Pelotas).
+
+# BrainWeb
+
+BrainWeb é uma aplicação web responsiva para criação e organização de mapas mentais interativos. A aplicação permite cadastro e login de usuários, criação de um mapa mental principal, inserção de nós personalizados e conexão visual entre eles.
+
+## Tecnologias utilizadas
+
+Frontend:
+- React
+- React Flow
+- JavaScript
+- HTML/CSS
+
+Backend:
+- Python
+- FastAPI
+- SQLAlchemy
+- PostgreSQL
+- JWT para autenticação
+- Passlib/Bcrypt para criptografia de senhas
+
+Banco de dados:
+- PostgreSQL
+
+## Funcionalidades principais
+
+- Cadastro e login de usuários
+- Persistência de sessão
+- Criação automática de mapa mental principal
+- Canvas interativo com React Flow
+- Criação de nós do tipo texto, imagem e checklist
+- Conexão entre nós
+- Salvamento das informações no banco de dados
+
+## Dependências necessárias
+
+Para executar o projeto localmente, é necessário ter instalado:
+
+- Node.js
+- npm
+- Python 3.12 ou superior
+- PostgreSQL
+- Git
+
+## Configuração do frontend
+
+Na pasta raiz do projeto, instale as dependências do React:
+
+npm install
+
+Para executar o frontend localmente:
+
+npm start
+
+O frontend será iniciado, por padrão, em:
+
+http://localhost:3000
+
+## Configuração do backend
+
+Acesse a pasta do backend:
+
+cd backend
+
+Crie um ambiente virtual:
+
+python -m venv venv
+
+Ative o ambiente virtual no Windows:
+
+venv\Scripts\activate
+
+Instale as dependências:
+
+pip install -r requirements.txt
+
+Execute o backend:
+
+uvicorn app.main:app --reload
+
+O backend será iniciado, por padrão, em:
+
+http://localhost:8000
+
+## Variáveis de ambiente
+
+O backend utiliza variáveis de ambiente para conexão com o banco e autenticação. Crie um arquivo .env dentro da pasta backend com base no arquivo .env.example, caso ele esteja disponível.
+
+Exemplo de variáveis necessárias:
+
+DATABASE_URL=postgresql://usuario:senha@localhost:5432/brainweb
+SECRET_KEY=sua_chave_secreta
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=180
+CORS_ORIGINS=http://localhost:3000
+
+No frontend, quando necessário, pode ser usada a variável:
+
+REACT_APP_API_URL=http://localhost:8000
+
+## Banco de dados
+
+O projeto utiliza PostgreSQL. Antes de executar a aplicação, é necessário criar o banco de dados e as tabelas usadas pelo sistema.
+
+O banco armazena:
+
+- usuários cadastrados
+- mapas mentais
+- nós do canvas
+- conexões entre nós
+
+## Estrutura geral do projeto
+
+A aplicação é dividida em duas partes principais:
+
+- Frontend: interface em React e React Flow
+- Backend: API em FastAPI com acesso ao PostgreSQL
+
+O backend segue uma organização em camadas, separando rotas, serviços, repositórios, modelos e schemas.
+
+## Observações
+
+As pastas node_modules e venv não devem ser enviadas ao repositório, pois são geradas localmente a partir dos arquivos de dependências.
+
+Arquivos de configuração sensível, como .env, também não devem ser enviados ao repositório.
+
+Para instalar o projeto em outro computador, basta clonar o repositório, instalar as dependências do frontend e do backend, configurar o banco de dados e preencher as variáveis de ambiente necessárias.

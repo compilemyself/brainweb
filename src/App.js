@@ -1,8 +1,18 @@
-import React from "react";
+import React, { useContext } from "react";
 import LoginPage from "./pages/LoginPage";
+import MapPage from "./pages/MapPage";
+import { AuthContext, AuthProvider } from "./context/AuthContext";
 
-// Módulo principal da aplicação. Responsável por renderizar a página inicial,
-// atualmente a tela de login/registro (LoginPage).
+function AppContent() {
+  const { user } = useContext(AuthContext);
+
+  return user ? <MapPage /> : <LoginPage />;
+}
+
 export default function App() {
-  return React.createElement(LoginPage);
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
 }
