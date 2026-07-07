@@ -1,11 +1,23 @@
 import React from "react";
-import { Handle, Position } from "reactflow";
+import { Handle, NodeResizer, Position } from "reactflow";
 
 const handleStyle = {
   width: 12,
   height: 12,
   background: "white",
   border: "2px solid #48abb3",
+};
+
+const resizeHandleStyle = {
+  width: 14,
+  height: 14,
+  borderRadius: 4,
+  border: "2px solid white",
+  background: "#48abb3",
+};
+
+const resizeLineStyle = {
+  borderColor: "white",
 };
 
 const smallButtonStyle = {
@@ -39,8 +51,16 @@ function getChecklistItems(data) {
   ];
 }
 
-export default function ChecklistNode({ id, data }) {
+function getNodeSize(data) {
+  return {
+    width: Number(data.width) || 260,
+    height: Number(data.height) || 220,
+  };
+}
+
+export default function ChecklistNode({ id, data, selected }) {
   const items = getChecklistItems(data);
+  const size = getNodeSize(data);
 
   const updateItems = (nextItems) => {
     data.onChange(id, { items: nextItems });
@@ -82,22 +102,72 @@ export default function ChecklistNode({ id, data }) {
     <div
       style={{
         position: "relative",
+        width: size.width,
+        height: size.height,
         padding: 10,
         borderRadius: 8,
         background: "#48abb3",
         color: "white",
-        minWidth: 220,
-        maxWidth: 340,
         border:
           data.isEdgeSource || data.isSelected
             ? "2px solid white"
             : "1px solid rgba(255,255,255,0.3)",
         boxShadow: data.edgeMode ? "0 0 0 2px rgba(255,255,255,0.18)" : "none",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
       }}
     >
+      <NodeResizer
+        isVisible={selected || data.isSelected}
+        minWidth={220}
+        minHeight={150}
+        maxWidth={560}
+        maxHeight={620}
+        handleStyle={resizeHandleStyle}
+        lineStyle={resizeLineStyle}
+        onResize={(_, params) => {
+          data.onChange(id, {
+            width: Math.round(params.width),
+            height: Math.round(params.height),
+          });
+        }}
+      />
+
       <Handle type="target" position={Position.Left} style={handleStyle} />
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div
+        className="node-drag-handle"
+        title="Arrastar nó"
+        style={{
+          minHeight: 26,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 6,
+          background: "rgba(255,255,255,0.14)",
+          color: "rgba(255,255,255,0.85)",
+          fontSize: 12,
+          letterSpacing: "0.04em",
+          cursor: "grab",
+          userSelect: "none",
+          touchAction: "none",
+        }}
+      >
+        arrastar
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          flex: 1,
+          minHeight: 0,
+          overflow: "auto",
+          paddingRight: 2,
+        }}
+      >
         {items.map((item) => (
           <label
             key={item.id}

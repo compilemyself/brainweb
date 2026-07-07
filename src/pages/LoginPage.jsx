@@ -2,7 +2,7 @@ import React, { useState, useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 import * as api from "../services/api";
 
-// Bloco de CSS responsável por centralizar toda identidade visual da landing page. 
+// Bloco de CSS responsável por centralizar toda identidade visual da landing page.
 // Define características dos elementos como fonte, cores, animações, etc.
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap');
@@ -76,9 +76,14 @@ const styles = `
     outline: none;
   }
 
-  .btn:hover {
+  .btn:hover:not(:disabled) {
     background: rgba(255,255,255,0.12);
     border-color: rgba(255,255,255,0.9);
+  }
+
+  .btn:disabled {
+    cursor: wait;
+    opacity: 0.65;
   }
 
   .btn.primary {
@@ -86,7 +91,7 @@ const styles = `
     border-color: #fff;
   }
 
-  .btn.primary:hover {
+  .btn.primary:hover:not(:disabled) {
     background: rgba(255,255,255,0.28);
   }
 
@@ -190,6 +195,15 @@ const styles = `
     margin-bottom: 28px;
   }
 
+  .feedback {
+    min-height: 18px;
+    margin-top: 14px;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    color: rgba(255,255,255,0.9);
+    text-align: center;
+  }
+
   .back-btn {
     background: none;
     border: none;
@@ -220,34 +234,91 @@ const styles = `
 // além do estado de expansão do formulário de login, do checkbox "manter-me conectado" e da chave de animação.
 export default function LoginScreen() {
   const { user, login } = useContext(AuthContext);
+
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+  const [nomeCadastro, setNomeCadastro] = useState("");
+  const [emailCadastro, setEmailCadastro] = useState("");
+  const [senhaCadastro, setSenhaCadastro] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const [screen, setScreen] = useState("home");
   const [loginOpen, setLoginOpen] = useState(false);
   const [keepLogged, setKeepLogged] = useState(false);
   const [animKey, setAnimKey] = useState(0);
 
-// Alterna para a tela de cadastro e reinicia a chave de animação para disparar a transição de entrada.
+  // Alterna para a tela de cadastro e reinicia a chave de animação para disparar a transição de entrada.
   function goRegister() {
     setScreen("register");
+    setFeedback("");
     setAnimKey(function(k) { return k + 1; });
   }
 
-// Retorna à tela inicial, fecha o formulário de login expandido e reinicia a animação.
+  // Retorna à tela inicial, fecha o formulário de login expandido e reinicia a animação.
   function goBack() {
     setScreen("home");
     setLoginOpen(false);
+    setFeedback("");
     setAnimKey(function(k) { return k + 1; });
   }
 
-// Abre o formulário de login expandido ao clicar no botão "fazer login".
+  // Abre o formulário de login expandido ao clicar no botão "fazer login".
   function handleLoginClick() {
     setLoginOpen(true);
   }
 
-// Renderização da tela de criação de conta (nome de usuário, e-mail e senha).
+  async function handleLoginSubmit() {
+    if (!email.trim() || !senha) {
+      setFeedback("Informe e-mail e senha.");
+      return;
+    }
 
+    setLoading(true);
+    setFeedback("");
+
+    try {
+      const data = await api.login(email.trim(), senha);
+      login(data, keepLogged);
+    } catch (err) {
+      setFeedback(err.message || "Erro ao fazer login.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRegisterSubmit() {
+    if (!nomeCadastro.trim() || !emailCadastro.trim() || !senhaCadastro) {
+      setFeedback("Preencha nome, e-mail e senha.");
+      return;
+    }
+
+    setLoading(true);
+    setFeedback("");
+
+    try {
+      await api.registrar(
+        nomeCadastro.trim(),
+        emailCadastro.trim(),
+        senhaCadastro
+      );
+
+      const data = await api.login(emailCadastro.trim(), senhaCadastro);
+      login(data, true);
+    } catch (err) {
+      setFeedback(err.message || "Erro ao criar conta.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function submitOnEnter(event, submitAction) {
+    if (event.key === "Enter") {
+      submitAction();
+    }
+  }
+
+  // Renderização da tela de criação de conta (nome de usuário, e-mail e senha).
   if (screen === "register") {
     return React.createElement(React.Fragment, null,
       React.createElement("style", null, styles),
@@ -256,10 +327,40 @@ export default function LoginScreen() {
           React.createElement("div", { className: "register-box", key: "register-" + animKey },
             React.createElement("button", { className: "back-btn", onClick: goBack }, "← voltar"),
             React.createElement("p", { className: "screen-title" }, "Crie sua conta"),
-            React.createElement("input", { className: "input-field", type: "text", placeholder: "nome de usuário", autoComplete: "username", autoFocus: true }),
-            React.createElement("input", { className: "input-field", type: "email", placeholder: "e-mail", autoComplete: "email" }),
-            React.createElement("input", { className: "input-field last", type: "password", placeholder: "senha", autoComplete: "new-password" }),
-            React.createElement("button", { className: "btn primary login-submit" }, "criar conta")
+            React.createElement("input", {
+              className: "input-field",
+              type: "text",
+              placeholder: "nome de usuário",
+              autoComplete: "username",
+              autoFocus: true,
+              value: nomeCadastro,
+              onChange: function(e) { setNomeCadastro(e.target.value); },
+              onKeyDown: function(e) { submitOnEnter(e, handleRegisterSubmit); }
+            }),
+            React.createElement("input", {
+              className: "input-field",
+              type: "email",
+              placeholder: "e-mail",
+              autoComplete: "email",
+              value: emailCadastro,
+              onChange: function(e) { setEmailCadastro(e.target.value); },
+              onKeyDown: function(e) { submitOnEnter(e, handleRegisterSubmit); }
+            }),
+            React.createElement("input", {
+              className: "input-field last",
+              type: "password",
+              placeholder: "senha",
+              autoComplete: "new-password",
+              value: senhaCadastro,
+              onChange: function(e) { setSenhaCadastro(e.target.value); },
+              onKeyDown: function(e) { submitOnEnter(e, handleRegisterSubmit); }
+            }),
+            feedback ? React.createElement("p", { className: "feedback" }, feedback) : null,
+            React.createElement("button", {
+              className: "btn primary login-submit",
+              onClick: handleRegisterSubmit,
+              disabled: loading
+            }, loading ? "criando..." : "criar conta")
           )
         )
       )
@@ -271,33 +372,54 @@ export default function LoginScreen() {
     React.createElement("style", null, styles),
     React.createElement("div", { className: "root" },
       React.createElement("div", { className: "card" },
-  // "Olá, {nome de usuário}." (padrão: Anônimo)
+        // "Olá, {nome de usuário}." (padrão: Anônimo)
         React.createElement("p",
-    { className: "greeting" },
-    "Olá, ", user ? user.nome : "Anônimo",
-"."),
+          { className: "greeting" },
+          "Olá, ", user ? user.nome : "Anônimo",
+          "."),
 
         React.createElement("div", { className: "btn-group" },
 
           // exibir botão "fazer login" ou formulário de login expandido
           loginOpen
             ? React.createElement("div", { className: "login-expand", key: "expand-" + animKey },
-              React.createElement("input", {className: "input-field", type: "email", placeholder: "e-mail", autoComplete: "email", autoFocus: true, value: email, onChange: function (e) { setEmail(e.target.value); }}),
-              React.createElement("input", {className: "input-field last", type: "password", placeholder: "senha", autoComplete: "current-password", value: senha, onChange: function (e) { setSenha(e.target.value); }}),
-                React.createElement("div", { className: "checkbox-row", onClick: function() { setKeepLogged(function(v) { return !v; }); } },
+              React.createElement("input", {
+                className: "input-field",
+                type: "email",
+                placeholder: "e-mail",
+                autoComplete: "email",
+                autoFocus: true,
+                value: email,
+                onChange: function(e) { setEmail(e.target.value); },
+                onKeyDown: function(e) { submitOnEnter(e, handleLoginSubmit); }
+              }),
+              React.createElement("input", {
+                className: "input-field last",
+                type: "password",
+                placeholder: "senha",
+                autoComplete: "current-password",
+                value: senha,
+                onChange: function(e) { setSenha(e.target.value); },
+                onKeyDown: function(e) { submitOnEnter(e, handleLoginSubmit); }
+              }),
+              React.createElement("div", { className: "checkbox-row", onClick: function() { setKeepLogged(function(v) { return !v; }); } },
                 React.createElement("div", { className: "checkbox-box" + (keepLogged ? " checked" : "") }, keepLogged ? "✓" : ""),
                 React.createElement("span", { className: "checkbox-label" }, "manter-me conectado")),
 
-                React.createElement("button", {className: "btn primary login-submit", onClick: async function () {try {const data = await api.login(email, senha); login(data, keepLogged);}
-                catch (err) {alert("Erro de conexão com servidor");}}}, "entrar"),
-                React.createElement("button", { className: "register-link", onClick: goRegister }, "cadastre-se para salvar seu progresso.")
-              )
+              feedback ? React.createElement("p", { className: "feedback" }, feedback) : null,
+
+              React.createElement("button", {
+                className: "btn primary login-submit",
+                onClick: handleLoginSubmit,
+                disabled: loading
+              }, loading ? "entrando..." : "entrar"),
+              React.createElement("button", { className: "register-link", onClick: goRegister }, "cadastre-se para salvar seu progresso.")
+            )
             : React.createElement("button", { className: "btn primary", onClick: handleLoginClick }, "fazer login"),
 
           // "criar mapa temporário" sempre visível
           React.createElement("button", { className: "btn" }, "criar mapa temporário")
         )
-
       )
     )
   );

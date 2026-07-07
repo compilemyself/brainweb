@@ -1,6 +1,5 @@
 import React from "react";
 import { Handle, Position } from "reactflow";
-import exemplo from "../../../assets/exemplo.png";
 
 const handleStyle = {
   width: 12,
@@ -10,6 +9,8 @@ const handleStyle = {
 };
 
 export default function ImageNode({ data }) {
+  const imageSrc = data.src || data.url || "";
+
   return (
     <div
       style={{
@@ -28,15 +29,32 @@ export default function ImageNode({ data }) {
       <Handle type="target" position={Position.Left} style={handleStyle} />
 
       <div style={{ overflow: "hidden", borderRadius: 8 }}>
-        <img
-          src={exemplo}
-          alt="Imagem"
-          draggable={false}
-          style={{
-            width: "100%",
-            display: "block",
-          }}
-        />
+        {imageSrc ? (
+          <img
+            src={imageSrc}
+            alt={data.label || "Imagem"}
+            draggable={false}
+            style={{
+              width: "100%",
+              display: "block",
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              minHeight: 120,
+              padding: 12,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              textAlign: "center",
+              color: "rgba(255,255,255,0.82)",
+              fontSize: 13,
+            }}
+          >
+            Imagem não selecionada
+          </div>
+        )}
       </div>
 
       <Handle type="source" position={Position.Right} style={handleStyle} />

@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import ReactFlow, {
   addEdge,
   Background,
@@ -10,6 +17,7 @@ import ReactFlow, {
 
 import "reactflow/dist/style.css";
 
+import { AuthContext } from "../../context/AuthContext";
 import { nodeTypes } from "./nodeTypes";
 import { salvarMapa } from "../../services/mapasApi";
 
@@ -17,6 +25,13 @@ const EDGE_STYLE = {
   stroke: "rgba(255,255,255,0.9)",
   strokeWidth: 2,
 };
+
+const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
+const DRAG_HANDLE_SELECTOR = ".node-drag-handle";
+
+function getDragHandleByType(type) {
+  return type === "TEXT" || type === "CHECKLIST" ? DRAG_HANDLE_SELECTOR : undefined;
+}
 
 const toolbarStyle = {
   position: "absolute",
@@ -47,6 +62,14 @@ const buttonStyle = {
 const dangerButtonStyle = {
   ...buttonStyle,
   background: "#b34848",
+};
+
+const logoutButtonStyle = {
+  ...dangerButtonStyle,
+  minHeight: 34,
+  padding: "6px 10px",
+  fontSize: 12,
+  marginLeft: "auto",
 };
 
 const activeButtonStyle = {
@@ -80,6 +103,8 @@ function getInitialDataByType(type) {
   switch (type) {
     case "CHECKLIST":
       return {
+        width: 260,
+        height: 220,
         items: [
           {
             id: generateId("item"),
@@ -92,11 +117,14 @@ function getInitialDataByType(type) {
     case "IMAGE":
       return {
         label: "Imagem",
+        src: "",
       };
 
     case "TEXT":
     default:
       return {
+        width: 240,
+        height: 170,
         label: "Novo texto",
       };
   }
@@ -109,7 +137,50 @@ function isTextEditingElement(element) {
   return tagName === "input" || tagName === "textarea" || element.isContentEditable;
 }
 
+function removeRuntimeData(data = {}) {
+  return Object.fromEntries(
+    Object.entries(data || {}).filter(
+      ([key]) =>
+        ![
+          "onChange",
+          "edgeMode",
+          "isEdgeSource",
+          "isSelected",
+        ].includes(key)
+    )
+  );
+}
+
+function buildFlowPayload(nodes, edges) {
+  return {
+    nodes: nodes.map((n) => ({
+      id: n.id,
+      type: n.type || "TEXT",
+      position: n.position,
+      data: removeRuntimeData(n.data),
+    })),
+    edges: edges.map((e) => ({
+      id: e.id,
+      source: e.source,
+      target: e.target,
+    })),
+  };
+}
+
+function readImageFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function MapEditor({ mapa }) {
+  const { logout } = useContext(AuthContext);
+  const imageInputRef = useRef(null);
+
   const initialNodes = useMemo(
     () =>
       (mapa.nodes || []).map((n) => ({
@@ -117,6 +188,7 @@ export default function MapEditor({ mapa }) {
         type: n.type || "TEXT",
         position: n.position || { x: 100, y: 100 },
         data: n.data || getInitialDataByType(n.type || "TEXT"),
+        dragHandle: getDragHandleByType(n.type || "TEXT"),
       })),
     [mapa.nodes]
   );
@@ -184,12 +256,16 @@ export default function MapEditor({ mapa }) {
   );
 
   const createNode = useCallback(
-    (type, position) => {
+    (type, position, customData = {}) => {
       const newNode = {
         id: generateId("node"),
         type,
         position,
-        data: getInitialDataByType(type),
+        data: {
+          ...getInitialDataByType(type),
+          ...customData,
+        },
+        dragHandle: getDragHandleByType(type),
       };
 
       setNodes((nds) => nds.concat(newNode));
@@ -199,16 +275,57 @@ export default function MapEditor({ mapa }) {
   );
 
   const addNode = useCallback(
-    (type) => {
+    (type, customData = {}) => {
       const center = getViewportCenterPosition();
       const offset = (nodes.length % 6) * 24;
 
-      createNode(type, {
-        x: center.x + offset,
-        y: center.y + offset,
-      });
+      createNode(
+        type,
+        {
+          x: center.x + offset,
+          y: center.y + offset,
+        },
+        customData
+      );
     },
     [createNode, getViewportCenterPosition, nodes.length]
+  );
+
+  const requestImageFile = useCallback(() => {
+    imageInputRef.current?.click();
+  }, []);
+
+  const handleImageSelected = useCallback(
+    async (event) => {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+
+      if (!file) return;
+
+      if (!file.type.startsWith("image/")) {
+        alert("Escolha um arquivo de imagem válido.");
+        return;
+      }
+
+      if (file.size > IMAGE_MAX_BYTES) {
+        alert("Imagem muito grande. Escolha um arquivo com até 4 MB.");
+        return;
+      }
+
+      try {
+        const src = await readImageFileAsDataUrl(file);
+        addNode("IMAGE", {
+          label: file.name,
+          src,
+          mimeType: file.type,
+          size: file.size,
+        });
+      } catch (error) {
+        console.error("Erro ao carregar imagem:", error);
+        alert("Não foi possível carregar a imagem selecionada.");
+      }
+    },
+    [addNode]
   );
 
   const deleteNode = useCallback(
@@ -311,6 +428,7 @@ export default function MapEditor({ mapa }) {
     () =>
       nodes.map((node) => ({
         ...node,
+        dragHandle: getDragHandleByType(node.type || "TEXT"),
         data: {
           ...node.data,
           onChange: updateNodeData,
@@ -321,6 +439,20 @@ export default function MapEditor({ mapa }) {
       })),
     [connectionSourceId, edgeMode, nodes, selectedNodeId, updateNodeData]
   );
+
+  const saveCurrentFlow = useCallback(() => {
+    return salvarMapa(mapa.id, buildFlowPayload(nodes, edges));
+  }, [edges, mapa.id, nodes]);
+
+  const handleSaveAndLogout = useCallback(async () => {
+    try {
+      await saveCurrentFlow();
+    } catch (error) {
+      console.error("Erro ao salvar antes de sair:", error);
+    } finally {
+      logout();
+    }
+  }, [logout, saveCurrentFlow]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -342,29 +474,7 @@ export default function MapEditor({ mapa }) {
     }
 
     saveTimeoutRef.current = setTimeout(() => {
-      salvarMapa(mapa.id, {
-        nodes: nodes.map((n) => ({
-          id: n.id,
-          type: n.type || "TEXT",
-          position: n.position,
-          data: Object.fromEntries(
-            Object.entries(n.data || {}).filter(
-              ([key]) =>
-                ![
-                  "onChange",
-                  "edgeMode",
-                  "isEdgeSource",
-                  "isSelected",
-                ].includes(key)
-            )
-          ),
-        })),
-        edges: edges.map((e) => ({
-          id: e.id,
-          source: e.source,
-          target: e.target,
-        })),
-      }).catch((error) => {
+      salvarMapa(mapa.id, buildFlowPayload(nodes, edges)).catch((error) => {
         console.error("Erro ao salvar mapa:", error);
       });
     }, 2500);
@@ -387,9 +497,17 @@ export default function MapEditor({ mapa }) {
           + texto
         </button>
 
-        <button style={buttonStyle} onClick={() => addNode("IMAGE")}>
+        <button style={buttonStyle} onClick={requestImageFile}>
           + imagem
         </button>
+
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageSelected}
+          style={{ display: "none" }}
+        />
 
         <button style={buttonStyle} onClick={() => addNode("CHECKLIST")}>
           + checklist
@@ -421,6 +539,10 @@ export default function MapEditor({ mapa }) {
               : "Toque no primeiro nó para iniciar a conexão."}
           </span>
         )}
+
+        <button style={logoutButtonStyle} onClick={handleSaveAndLogout}>
+          salvar e sair
+        </button>
       </div>
 
       <ReactFlow
