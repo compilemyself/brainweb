@@ -1,7 +1,4 @@
-const API = (process.env.REACT_APP_API_URL || "http://localhost:8000").replace(
-  /\/$/,
-  ""
-);
+import { buildApiUrl, normalizeNetworkError } from "./apiConfig";
 
 const LOCAL_MAPA_ID = "local";
 const LOCAL_FLOW_KEY = "brainweb.flow.local";
@@ -60,8 +57,14 @@ function saveLocalFlow(data) {
   }
 }
 
-async function fetchJson(url, options = {}) {
-  const res = await fetch(url, options);
+async function fetchJson(path, options = {}) {
+  let res;
+
+  try {
+    res = await fetch(buildApiUrl(path), options);
+  } catch (error) {
+    throw normalizeNetworkError(error);
+  }
 
   if (!res.ok) {
     let message = `Erro HTTP ${res.status}`;
@@ -81,7 +84,7 @@ async function fetchJson(url, options = {}) {
 
 export async function getMapaPrincipal() {
   try {
-    return await fetchJson(`${API}/mapas/principal`, {
+    return await fetchJson("/mapas/principal", {
       headers: getAuthHeaders(),
     });
   } catch (error) {
@@ -96,7 +99,7 @@ export async function getMapaPrincipal() {
 
 export async function getFlowPrincipal() {
   try {
-    return await fetchJson(`${API}/mapas/principal/flow`, {
+    return await fetchJson("/mapas/principal/flow", {
       headers: getAuthHeaders(),
     });
   } catch (error) {
@@ -116,7 +119,7 @@ export async function salvarMapa(mapaId, data) {
   }
 
   try {
-    const resposta = await fetchJson(`${API}/mapas/${mapaId}/flow`, {
+    const resposta = await fetchJson(`/mapas/${mapaId}/flow`, {
       method: "PUT",
       headers: getAuthHeaders({
         "Content-Type": "application/json",

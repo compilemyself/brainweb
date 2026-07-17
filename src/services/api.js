@@ -1,16 +1,22 @@
-const API = (process.env.REACT_APP_API_URL || "http://localhost:8000").replace(
-  /\/$/,
-  ""
-);
+import {
+  buildApiUrl,
+  normalizeNetworkError,
+} from "./apiConfig";
 
 async function requestJson(path, options = {}) {
-  const resposta = await fetch(`${API}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-  });
+  let resposta;
+
+  try {
+    resposta = await fetch(buildApiUrl(path), {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+    });
+  } catch (error) {
+    throw normalizeNetworkError(error);
+  }
 
   let dados = null;
 
