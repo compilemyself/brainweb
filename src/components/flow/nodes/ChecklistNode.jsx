@@ -2,22 +2,26 @@ import React from "react";
 import { Handle, NodeResizer, Position } from "reactflow";
 
 const handleStyle = {
-  width: 12,
-  height: 12,
+  width: 20,
+  height: 20,
   background: "white",
-  border: "2px solid #48abb3",
+  border: "3px solid #48abb3",
+  zIndex: 24,
+  touchAction: "none",
 };
 
 const resizeHandleStyle = {
-  width: 14,
-  height: 14,
-  borderRadius: 4,
-  border: "2px solid white",
+  width: 22,
+  height: 22,
+  borderRadius: 6,
+  border: "3px solid white",
   background: "#48abb3",
+  touchAction: "none",
 };
 
 const resizeLineStyle = {
   borderColor: "white",
+  borderWidth: 2,
 };
 
 const smallButtonStyle = {
@@ -26,7 +30,8 @@ const smallButtonStyle = {
   background: "rgba(255,255,255,0.14)",
   color: "white",
   cursor: "pointer",
-  minHeight: 30,
+  minHeight: 34,
+  touchAction: "manipulation",
 };
 
 function generateItemId() {
@@ -105,14 +110,18 @@ export default function ChecklistNode({ id, data, selected }) {
         width: size.width,
         height: size.height,
         padding: 10,
+        boxSizing: "border-box",
         borderRadius: 8,
         background: "#48abb3",
         color: "white",
-        border:
-          data.isEdgeSource || data.isSelected
+        border: data.isEdgeSource
+          ? "3px solid #baf7c2"
+          : data.isSelected
             ? "2px solid white"
             : "1px solid rgba(255,255,255,0.3)",
-        boxShadow: data.edgeMode ? "0 0 0 2px rgba(255,255,255,0.18)" : "none",
+        boxShadow: data.edgeMode
+          ? "0 0 0 4px rgba(186,247,194,0.18)"
+          : "none",
         display: "flex",
         flexDirection: "column",
         gap: 8,
@@ -120,18 +129,20 @@ export default function ChecklistNode({ id, data, selected }) {
     >
       <NodeResizer
         isVisible={selected || data.isSelected}
-        minWidth={220}
-        minHeight={150}
-        maxWidth={560}
-        maxHeight={620}
+        minWidth={150}
+        minHeight={110}
+        maxWidth={900}
+        maxHeight={900}
         handleStyle={resizeHandleStyle}
         lineStyle={resizeLineStyle}
+        onResizeStart={() => data.onResizeStart?.()}
         onResize={(_, params) => {
-          data.onChange(id, {
+          data.onResize(id, {
             width: Math.round(params.width),
             height: Math.round(params.height),
           });
         }}
+        onResizeEnd={() => data.onResizeEnd?.()}
       />
 
       <Handle type="target" position={Position.Left} style={handleStyle} />
@@ -140,7 +151,7 @@ export default function ChecklistNode({ id, data, selected }) {
         className="node-drag-handle"
         title="Arrastar nó"
         style={{
-          minHeight: 26,
+          minHeight: 30,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -152,6 +163,7 @@ export default function ChecklistNode({ id, data, selected }) {
           cursor: "grab",
           userSelect: "none",
           touchAction: "none",
+          flexShrink: 0,
         }}
       >
         arrastar
@@ -182,24 +194,28 @@ export default function ChecklistNode({ id, data, selected }) {
               className="nodrag"
               type="checkbox"
               checked={!!item.checked}
-              onChange={(e) => {
-                updateItem(item.id, { checked: e.target.checked });
+              onChange={(event) => {
+                updateItem(item.id, { checked: event.target.checked });
               }}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
+              onBlur={() => data.onEditEnd?.()}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+              style={{ width: 19, height: 19 }}
             />
 
             <input
               className="nodrag"
               value={item.label || ""}
-              onChange={(e) => {
-                updateItem(item.id, { label: e.target.value });
+              onChange={(event) => {
+                updateItem(item.id, { label: event.target.value });
               }}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
+              onBlur={() => data.onEditEnd?.()}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
               placeholder="Item da lista"
               style={{
                 minWidth: 0,
+                minHeight: 32,
                 border: "none",
                 outline: "none",
                 background: "transparent",
@@ -211,15 +227,15 @@ export default function ChecklistNode({ id, data, selected }) {
             <button
               className="nodrag"
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
+              onClick={(event) => {
+                event.stopPropagation();
                 removeItem(item.id);
               }}
-              onPointerDown={(e) => e.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
               title="Remover item"
               style={{
                 ...smallButtonStyle,
-                width: 30,
+                width: 34,
               }}
             >
               ×
@@ -230,11 +246,11 @@ export default function ChecklistNode({ id, data, selected }) {
         <button
           className="nodrag"
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
+          onClick={(event) => {
+            event.stopPropagation();
             addItem();
           }}
-          onPointerDown={(e) => e.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
           style={smallButtonStyle}
         >
           + item
@@ -242,6 +258,24 @@ export default function ChecklistNode({ id, data, selected }) {
       </div>
 
       <Handle type="source" position={Position.Right} style={handleStyle} />
+
+      {data.edgeMode && (
+        <div
+          className="nodrag"
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 30,
+            borderRadius: 8,
+            background: data.isEdgeSource
+              ? "rgba(186,247,194,0.13)"
+              : "rgba(255,255,255,0.025)",
+            cursor: "crosshair",
+            touchAction: "manipulation",
+          }}
+        />
+      )}
     </div>
   );
 }

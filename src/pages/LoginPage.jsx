@@ -171,8 +171,8 @@ const styles = `
 
   .register-link {
     margin-top: 24px;
-    font-size: 0.75rem;
-    color: rgba(255,255,255,0.45);
+    font-size: 0.84rem;
+    color: rgba(255,255,255,0.7);
     letter-spacing: 0.04em;
     cursor: pointer;
     text-decoration: underline;
@@ -185,7 +185,7 @@ const styles = `
     font-family: 'Courier Prime', 'Courier New', monospace;
   }
 
-  .register-link:hover { color: rgba(255,255,255,0.75); }
+  .register-link:hover { color: rgba(255,255,255,0.95); }
 
   .screen-title {
     font-size: clamp(1.2rem, 4vw, 1.5rem);
@@ -232,8 +232,8 @@ const styles = `
 
 // Componente principal da tela de login/registro. Controla a navegação entre as telas "home" (login) e "register",
 // além do estado de expansão do formulário de login, do checkbox "manter-me conectado" e da chave de animação.
-export default function LoginScreen() {
-  const { user, login } = useContext(AuthContext);
+export default function LoginScreen({ onOpenMap }) {
+  const { user, login, logout } = useContext(AuthContext);
 
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
@@ -280,6 +280,8 @@ export default function LoginScreen() {
     try {
       const data = await api.login(email.trim(), senha);
       login(data, keepLogged);
+      setScreen("home");
+      setLoginOpen(false);
     } catch (err) {
       setFeedback(err.message || "Erro ao fazer login.");
     } finally {
@@ -305,6 +307,8 @@ export default function LoginScreen() {
 
       const data = await api.login(emailCadastro.trim(), senhaCadastro);
       login(data, true);
+      setScreen("home");
+      setLoginOpen(false);
     } catch (err) {
       setFeedback(err.message || "Erro ao criar conta.");
     } finally {
@@ -316,6 +320,34 @@ export default function LoginScreen() {
     if (event.key === "Enter") {
       submitAction();
     }
+  }
+
+  function handleTemporaryMapClick() {
+    alert("O mapa temporário estará disponível em uma atualização futura.");
+  }
+
+  // Uma sessão restaurada permanece na landing page para que o usuário escolha
+  // conscientemente quando deseja abrir o mapa ou desconectar a conta.
+  if (user) {
+    return React.createElement(React.Fragment, null,
+      React.createElement("style", null, styles),
+      React.createElement("div", { className: "root" },
+        React.createElement("div", { className: "card" },
+          React.createElement("p", { className: "greeting" },
+            "Olá, ", user.nome, ". Que bom ter você de volta."),
+          React.createElement("div", { className: "btn-group" },
+            React.createElement("button", {
+              className: "btn primary",
+              onClick: onOpenMap
+            }, "acessar seu mapa"),
+            React.createElement("button", {
+              className: "btn",
+              onClick: logout
+            }, "desconectar conta")
+          )
+        )
+      )
+    );
   }
 
   // Renderização da tela de criação de conta (nome de usuário, e-mail e senha).
@@ -418,7 +450,7 @@ export default function LoginScreen() {
             : React.createElement("button", { className: "btn primary", onClick: handleLoginClick }, "fazer login"),
 
           // "criar mapa temporário" sempre visível
-          React.createElement("button", { className: "btn" }, "criar mapa temporário")
+          React.createElement("button", { className: "btn", onClick: handleTemporaryMapClick }, "criar mapa temporário")
         )
       )
     )
