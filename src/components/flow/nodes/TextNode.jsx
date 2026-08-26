@@ -42,15 +42,27 @@ function getNodeSize(data) {
 
 function getLineStyle(line) {
   if (line.startsWith(">")) {
-    return { color: "#8af29b", fontSize: 15 };
+    return {
+      color: "#789922",
+      fontFamily: "Arial, Helvetica, sans-serif",
+      fontSize: 14,
+    };
   }
 
   if (line.startsWith("<")) {
-    return { color: "#ff9999", fontSize: 15 };
+    return {
+      color: "#ff0000",
+      fontFamily: "Arial, Helvetica, sans-serif",
+      fontSize: 14,
+    };
   }
 
   if (line.startsWith("-")) {
-    return { color: "rgba(235,242,243,0.68)", fontSize: 15 };
+    return {
+      color: "rgba(235,242,243,0.68)",
+      fontSize: 16,
+      fontStyle: "italic",
+    };
   }
 
   return { color: "white", fontSize: 16 };
@@ -124,8 +136,6 @@ export default function TextNode({ id, data, selected }) {
         isVisible={selected || data.isSelected}
         minWidth={120}
         minHeight={84}
-        maxWidth={900}
-        maxHeight={900}
         handleStyle={resizeHandleStyle}
         lineStyle={resizeLineStyle}
         onResizeStart={() => data.onResizeStart?.()}
@@ -176,7 +186,7 @@ export default function TextNode({ id, data, selected }) {
         />
 
         <textarea
-          className="nodrag"
+          className="nodrag nowheel"
           value={data.label || ""}
           onChange={(event) => {
             data.onChange(id, { label: event.target.value });

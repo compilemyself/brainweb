@@ -334,7 +334,9 @@ export default function LoginScreen({ onOpenMap }) {
       React.createElement("div", { className: "root" },
         React.createElement("div", { className: "card" },
           React.createElement("p", { className: "greeting" },
-            "Olá, ", user.nome, ". Que bom ter você de volta."),
+            "Olá, ", user.nome, ".",
+            React.createElement("br"),
+            "Que bom ter você de volta."),
           React.createElement("div", { className: "btn-group" },
             React.createElement("button", {
               className: "btn primary",

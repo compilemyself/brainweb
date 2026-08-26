@@ -131,8 +131,6 @@ export default function ChecklistNode({ id, data, selected }) {
         isVisible={selected || data.isSelected}
         minWidth={150}
         minHeight={110}
-        maxWidth={900}
-        maxHeight={900}
         handleStyle={resizeHandleStyle}
         lineStyle={resizeLineStyle}
         onResizeStart={() => data.onResizeStart?.()}
@@ -170,6 +168,7 @@ export default function ChecklistNode({ id, data, selected }) {
       </div>
 
       <div
+        className="nowheel"
         style={{
           display: "flex",
           flexDirection: "column",

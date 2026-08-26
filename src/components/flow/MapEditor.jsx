@@ -1055,7 +1055,15 @@ export default function MapEditor({ mapa }) {
         style={{ cursor: edgeMode ? "crosshair" : "default" }}
       >
         <Background color="rgba(72,171,179,.25)" gap={24} size={1.5} />
-        <Controls />
+        <Controls
+          className="brainweb-flow-controls"
+          style={{
+            zIndex: 40,
+            display: "flex",
+            visibility: "visible",
+            opacity: 1,
+          }}
+        />
       </ReactFlow>
     </div>
   );
