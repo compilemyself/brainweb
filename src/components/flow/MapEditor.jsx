@@ -459,28 +459,10 @@ export default function MapEditor({ mapa }) {
   }, []);
 
   const onNodesChange = useCallback((changes) => {
-    const allowed = editingNodeId
-      ? changes
-      : changes.filter((change) =>
-        change.type !== "position" &&
-        change.type !== "dimensions" &&
-        change.type !== "select"
-      );
-
-    if (!allowed.length) return;
-
-    setNodes((items) => applyNodeChanges(allowed, items));
-  }, [editingNodeId, setNodes]);
+    setNodes((items) => applyNodeChanges(changes, items));
+  }, [setNodes]);
 
   const onEdgesChange = useCallback((changes) => {
-    console.log(
-      "REACTFLOW - onEdgesChange:",
-      changes.map((change) => ({
-        id: change.id,
-        type: change.type,
-      }))
-    );
-
     if (changes.some((c) => c.type === "remove")) pushHistory(capture(), false);
     setEdges((items) => applyEdgeChanges(changes, items));
   }, [capture, pushHistory, setEdges]);
@@ -495,7 +477,7 @@ export default function MapEditor({ mapa }) {
   const nodesWithHandlers = useMemo(() => nodes.map((node) => ({
     ...node,
     selected: false,
-    draggable: editingNodeId === node.id,
+    draggable: true,
     data: {
       ...node.data,
       accentColor,

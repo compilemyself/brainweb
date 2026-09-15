@@ -65,26 +65,8 @@ export default function MapPage() {
   if (!mapa) return <div>Carregando mapa...</div>;
 
   return (
-    <>
-      <div
-        style={{
-          position: "fixed",
-          top: "10px",
-          left: "10px",
-          zIndex: 9999,
-          padding: "8px 12px",
-          background: "#fff",
-          border: "1px solid #ccc",
-          borderRadius: "6px",
-          fontSize: "14px"
-        }}
-      >
-        Diagnóstico: {mapa.nodes.length} nós | {mapa.edges.length} arestas
-      </div>
-
-      <ReactFlowProvider>
-        <MapEditor mapa={mapa} />
-      </ReactFlowProvider>
-    </>
+    <ReactFlowProvider>
+      <MapEditor mapa={mapa} />
+    </ReactFlowProvider>
   );
 }

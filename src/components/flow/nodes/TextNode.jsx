@@ -119,7 +119,6 @@ export default function TextNode({ id, data }) {
             autoFocus
             value={data.label || ""}
             onChange={(e) => data.onChange?.(id, { label: e.target.value })}
-            onBlur={() => data.onEditEnd?.()}
             onScroll={(e) => {
               if (highlightedRef.current) {
                 highlightedRef.current.scrollTop = e.currentTarget.scrollTop;

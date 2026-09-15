@@ -106,7 +106,6 @@ export default function ChecklistNode({ id: nodeId, data }) {
                       : x
                   ))
                 }
-                onBlur={() => data.onEditEnd?.()}
                 style={{
                   minWidth: 0,
                   minHeight: 30,
