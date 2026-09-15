@@ -857,7 +857,7 @@ export default function MapEditor({ mapa }) {
           const target = nodes.find((n) => n.id === edge.target);
           if (!source || !target) return null;
 
-          const [path, x, y] = getBezierPath({
+          const [, x, y] = getBezierPath({
             sourceX: source.position.x,
             sourceY: source.position.y,
             targetX: target.position.x,
