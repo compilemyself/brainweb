@@ -113,10 +113,6 @@ export default function MapEditor({ mapa }) {
   const pendingHistoryRef = useRef(null);
   const historyTimeoutRef = useRef(null);
   const transactionRef = useRef(null);
-  const renderCountRef = useRef(0);
-  const changeCountRef = useRef(0);
-
-  renderCountRef.current += 1;
 
   const initialNodes = useMemo(() => (mapa.nodes || []).map((node) => ({
     id: String(node.id),
@@ -152,14 +148,6 @@ export default function MapEditor({ mapa }) {
   const [calendarEnabled, setCalendarEnabled] = useState(mapa.relogio_ativo !== false);
   const [noteEnabled, setNoteEnabled] = useState(mapa.nota_flutuante_ativa !== false);
   const [accentColor, setAccentColor] = useState(user?.cor_mapa || "#48abb3");
-
-  useEffect(() => {
-    console.log("MAPEDITOR - render:", renderCountRef.current);
-    console.log("MAPEDITOR - initialNodes:", initialNodes);
-    console.log("MAPEDITOR - initialEdges:", initialEdges);
-    console.log("MAPEDITOR - nodes:", nodes);
-    console.log("MAPEDITOR - edges:", edges);
-  }, [initialNodes, initialEdges, nodes, edges]);
 
   const setNodes = useCallback((updater) => setNodesState((current) => {
     const next = typeof updater === "function" ? updater(current) : updater;
@@ -455,18 +443,6 @@ export default function MapEditor({ mapa }) {
   }, []);
 
   const onNodesChange = useCallback((changes) => {
-    changeCountRef.current += 1;
-
-    console.log(
-      "REACTFLOW - onNodesChange:",
-      changes.map((change) => ({
-        id: change.id,
-        type: change.type,
-        dimensions: change.dimensions,
-        position: change.position,
-      }))
-    );
-
     const allowed = editingNodeId
       ? changes
       : changes.filter((change) =>
@@ -474,6 +450,8 @@ export default function MapEditor({ mapa }) {
         change.type !== "dimensions" &&
         change.type !== "select"
       );
+
+    if (!allowed.length) return;
 
     setNodes((items) => applyNodeChanges(allowed, items));
   }, [editingNodeId, setNodes]);
@@ -788,28 +766,6 @@ export default function MapEditor({ mapa }) {
         <button className="bw-toolbar-button bw-logout" onClick={handleLogout}>
           salvar e sair
         </button>
-      </div>
-
-      <div
-        style={{
-          position: "fixed",
-          left: 12,
-          bottom: 12,
-          zIndex: 9999,
-          padding: "8px 12px",
-          background: "#fff",
-          color: "#111",
-          border: "1px solid #ccc",
-          borderRadius: "6px",
-          fontSize: "13px",
-          fontFamily: "monospace",
-          pointerEvents: "none",
-        }}
-      >
-        Diagnóstico MapEditor<br />
-        Renderizações: {renderCountRef.current}<br />
-        Estado: {nodes.length} nós | {edges.length} arestas<br />
-        React Flow changes: {changeCountRef.current}
       </div>
 
       {settingsOpen && (
