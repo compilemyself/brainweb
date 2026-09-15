@@ -430,6 +430,22 @@ export default function MapEditor({ mapa }) {
     leaveEditing();
   }, [leaveEditing]);
 
+  const onCanvasDoubleClick = useCallback((event) => {
+  if (
+    event.target.closest?.(".react-flow__node") ||
+    event.target.closest?.(".react-flow__edge") ||
+    event.target.closest?.(".react-flow__controls") ||
+    event.target.closest?.(".bw-toolbar-button") ||
+    event.target.closest?.(".bw-map-settings") ||
+    event.target.closest?.(".bw-floating-note")
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  reactFlow.fitView({ duration: 200 });
+}, [reactFlow]);
+
   const onEdgeClick = useCallback((event, edge) => {
     event.stopPropagation();
     setEditingNodeId(null);
@@ -834,6 +850,8 @@ export default function MapEditor({ mapa }) {
       <ReactFlow
         nodes={nodesWithHandlers}
         edges={edges}
+        onDoubleClick={onCanvasDoubleClick}
+        zoomOnDoubleClick={false}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
