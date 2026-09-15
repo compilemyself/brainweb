@@ -96,7 +96,7 @@ button, input, textarea { font: inherit; }
 
 .bw-floating-note {
   position: absolute;
-  top: 14px;
+  top: 68px;
   right: 14px;
   z-index: 35;
 }
