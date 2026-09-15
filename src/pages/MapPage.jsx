@@ -15,6 +15,10 @@ export default function MapPage() {
         const mapaData = await getMapaPrincipal();
         const flowData = await getFlowPrincipal();
 
+        console.log("MAPA CARREGADO:", mapaData);
+        console.log("NODES:", flowData.nodes);
+        console.log("EDGES:", flowData.edges);
+
         if (!ativo) return;
 
         setMapa({
@@ -61,8 +65,26 @@ export default function MapPage() {
   if (!mapa) return <div>Carregando mapa...</div>;
 
   return (
-    <ReactFlowProvider>
-      <MapEditor mapa={mapa} />
-    </ReactFlowProvider>
+    <>
+      <div
+        style={{
+          position: "fixed",
+          top: "10px",
+          left: "10px",
+          zIndex: 9999,
+          padding: "8px 12px",
+          background: "#fff",
+          border: "1px solid #ccc",
+          borderRadius: "6px",
+          fontSize: "14px"
+        }}
+      >
+        Diagnóstico: {mapa.nodes.length} nós | {mapa.edges.length} arestas
+      </div>
+
+      <ReactFlowProvider>
+        <MapEditor mapa={mapa} />
+      </ReactFlowProvider>
+    </>
   );
 }
