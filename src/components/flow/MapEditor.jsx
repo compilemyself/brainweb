@@ -115,16 +115,16 @@ export default function MapEditor({ mapa }) {
   const transactionRef = useRef(null);
 
   const initialNodes = useMemo(() => (mapa.nodes || []).map((node) => ({
-    id: node.id,
+    id: String(node.id),
     type: node.type || "TEXT",
     position: node.position || { x: 100, y: 100 },
     data: { ...getInitialDataByType(node.type || "TEXT"), ...(node.data || {}) },
   })), [mapa.nodes]);
 
   const initialEdges = useMemo(() => (mapa.edges || []).map((edge) => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
+    id: String(edge.id),
+    source: String(edge.source),
+    target: String(edge.target),
     label: edge.label || "",
     style: EDGE_STYLE,
   })), [mapa.edges]);
