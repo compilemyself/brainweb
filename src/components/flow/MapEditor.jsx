@@ -131,6 +131,14 @@ export default function MapEditor({ mapa }) {
 
   const [nodes, setNodesState] = useState(initialNodes);
   const [edges, setEdgesState] = useState(initialEdges);
+
+  useEffect(() => {
+    console.log("MAPEDITOR - initialNodes:", initialNodes);
+    console.log("MAPEDITOR - initialEdges:", initialEdges);
+    console.log("MAPEDITOR - nodes:", nodes);
+    console.log("MAPEDITOR - edges:", edges);
+  }, [initialNodes, initialEdges, nodes, edges]);
+
   const nodesRef = useRef(initialNodes);
   const edgesRef = useRef(initialEdges);
   const [editingNodeId, setEditingNodeId] = useState(null);
