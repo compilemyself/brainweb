@@ -2,8 +2,6 @@ import React, { useState, useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 import * as api from "../services/api";
 
-// Bloco de CSS responsável por centralizar toda identidade visual da landing page.
-// Define características dos elementos como fonte, cores, animações, etc.
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap');
 
@@ -17,7 +15,7 @@ const styles = `
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #48abb3;
+    background: var(--bw-accent, #48abb3);
     padding: 24px;
   }
 
@@ -230,8 +228,6 @@ const styles = `
   }
 `;
 
-// Componente principal da tela de login/registro. Controla a navegação entre as telas "home" (login) e "register",
-// além do estado de expansão do formulário de login, do checkbox "manter-me conectado" e da chave de animação.
 export default function LoginScreen({ onOpenMap }) {
   const { user, login, logout } = useContext(AuthContext);
 
@@ -248,14 +244,12 @@ export default function LoginScreen({ onOpenMap }) {
   const [keepLogged, setKeepLogged] = useState(false);
   const [animKey, setAnimKey] = useState(0);
 
-  // Alterna para a tela de cadastro e reinicia a chave de animação para disparar a transição de entrada.
   function goRegister() {
     setScreen("register");
     setFeedback("");
     setAnimKey(function(k) { return k + 1; });
   }
 
-  // Retorna à tela inicial, fecha o formulário de login expandido e reinicia a animação.
   function goBack() {
     setScreen("home");
     setLoginOpen(false);
@@ -263,7 +257,6 @@ export default function LoginScreen({ onOpenMap }) {
     setAnimKey(function(k) { return k + 1; });
   }
 
-  // Abre o formulário de login expandido ao clicar no botão "fazer login".
   function handleLoginClick() {
     setLoginOpen(true);
   }
@@ -326,17 +319,13 @@ export default function LoginScreen({ onOpenMap }) {
     alert("O mapa temporário estará disponível em uma atualização futura.");
   }
 
-  // Uma sessão restaurada permanece na landing page para que o usuário escolha
-  // conscientemente quando deseja abrir o mapa ou desconectar a conta.
   if (user) {
     return React.createElement(React.Fragment, null,
       React.createElement("style", null, styles),
       React.createElement("div", { className: "root" },
         React.createElement("div", { className: "card" },
           React.createElement("p", { className: "greeting" },
-            "Olá, ", user.nome, ".",
-            React.createElement("br"),
-            "Que bom ter você de volta."),
+            "Olá, ", user.nome, ". Que bom ter você de volta."),
           React.createElement("div", { className: "btn-group" },
             React.createElement("button", {
               className: "btn primary",
@@ -352,7 +341,6 @@ export default function LoginScreen({ onOpenMap }) {
     );
   }
 
-  // Renderização da tela de criação de conta (nome de usuário, e-mail e senha).
   if (screen === "register") {
     return React.createElement(React.Fragment, null,
       React.createElement("style", null, styles),
@@ -401,20 +389,16 @@ export default function LoginScreen({ onOpenMap }) {
     );
   }
 
-  // Renderização da tela inicial com a saudação, o botão/formulário de login e o botão de criar mapa temporário.
   return React.createElement(React.Fragment, null,
     React.createElement("style", null, styles),
     React.createElement("div", { className: "root" },
       React.createElement("div", { className: "card" },
-        // "Olá, {nome de usuário}." (padrão: Anônimo)
         React.createElement("p",
           { className: "greeting" },
           "Olá, ", user ? user.nome : "Anônimo",
           "."),
 
         React.createElement("div", { className: "btn-group" },
-
-          // exibir botão "fazer login" ou formulário de login expandido
           loginOpen
             ? React.createElement("div", { className: "login-expand", key: "expand-" + animKey },
               React.createElement("input", {
@@ -451,7 +435,6 @@ export default function LoginScreen({ onOpenMap }) {
             )
             : React.createElement("button", { className: "btn primary", onClick: handleLoginClick }, "fazer login"),
 
-          // "criar mapa temporário" sempre visível
           React.createElement("button", { className: "btn", onClick: handleTemporaryMapClick }, "criar mapa temporário")
         )
       )

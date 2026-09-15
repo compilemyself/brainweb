@@ -1,189 +1,53 @@
 import React, {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
+  useCallback, useContext, useEffect, useMemo, useRef, useState,
 } from "react";
 import ReactFlow, {
-  addEdge,
-  applyEdgeChanges,
-  applyNodeChanges,
-  Background,
-  Controls,
-  useReactFlow,
+  addEdge, applyEdgeChanges, applyNodeChanges,
+  Background, Controls, EdgeLabelRenderer, getBezierPath,
+  Position, useReactFlow,
 } from "reactflow";
-
 import "reactflow/dist/style.css";
 
 import { AuthContext } from "../../context/AuthContext";
 import { nodeTypes } from "./nodeTypes";
-import { salvarMapa } from "../../services/mapasApi";
+import { salvarMapa, salvarConfiguracaoMapa } from "../../services/mapasApi";
+import { atualizarPreferenciasUsuario } from "../../services/usuarioApi";
 
-const EDGE_STYLE = {
-  stroke: "rgba(255,255,255,0.9)",
-  strokeWidth: 2,
-};
-
+const EDGE_STYLE = { stroke: "rgba(255,255,255,0.72)", strokeWidth: 2 };
 const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
-const DRAG_HANDLE_SELECTOR = ".node-drag-handle";
 const HISTORY_LIMIT = 80;
 const DATA_HISTORY_DELAY = 650;
-
-function getDragHandleByType() {
-  return DRAG_HANDLE_SELECTOR;
-}
-
-const toolbarStyle = {
-  position: "absolute",
-  top: 12,
-  left: 12,
-  right: 12,
-  zIndex: 30,
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-  flexWrap: "wrap",
-  pointerEvents: "none",
-};
-
-const buttonStyle = {
-  minHeight: 42,
-  padding: "9px 13px",
-  borderRadius: 8,
-  border: "1px solid rgba(255,255,255,0.5)",
-  background: "#48abb3",
-  color: "white",
-  cursor: "pointer",
-  fontFamily: "inherit",
-  fontSize: 14,
-  pointerEvents: "auto",
-  touchAction: "manipulation",
-};
-
-const dangerButtonStyle = {
-  ...buttonStyle,
-  background: "#b34848",
-};
-
-const logoutButtonStyle = {
-  ...dangerButtonStyle,
-  minHeight: 36,
-  padding: "7px 11px",
-  fontSize: 12,
-  marginLeft: "auto",
-};
-
-const activeButtonStyle = {
-  ...buttonStyle,
-  background: "#effff1",
-  color: "#143b2a",
-  border: "2px solid #baf7c2",
-  boxShadow: "0 0 0 4px rgba(186,247,194,0.24)",
-  fontWeight: 700,
-};
-
-const statusStyle = {
-  minHeight: 42,
-  display: "flex",
-  alignItems: "center",
-  padding: "8px 11px",
-  borderRadius: 8,
-  border: "1px solid rgba(186,247,194,0.55)",
-  background: "rgba(15,47,51,0.94)",
-  color: "white",
-  fontSize: 13,
-  pointerEvents: "none",
-};
-
-const nodeMenuStyle = {
-  position: "absolute",
-  top: "calc(100% + 6px)",
-  left: 0,
-  minWidth: 170,
-  display: "grid",
-  gap: 5,
-  padding: 6,
-  borderRadius: 9,
-  border: "1px solid rgba(255,255,255,0.42)",
-  background: "rgba(15,47,51,0.97)",
-  boxShadow: "0 10px 28px rgba(0,0,0,0.28)",
-  pointerEvents: "auto",
-};
-
-const nodeMenuButtonStyle = {
-  ...buttonStyle,
-  width: "100%",
-  minHeight: 38,
-  textAlign: "left",
-  background: "rgba(72,171,179,0.38)",
-};
+const COLORS = [
+  "#48abb3", "#47b393", "#47b36d", "#74b347", "#b3af47", "#b37d47",
+  "#b34747", "#b3479a", "#8d47b3", "#5d47b3", "#4768b3",
+];
 
 function generateId(prefix) {
-  if (window.crypto && typeof window.crypto.randomUUID === "function") {
-    return window.crypto.randomUUID();
-  }
-
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function getInitialDataByType(type) {
-  switch (type) {
-    case "CHECKLIST":
-      return {
-        width: 260,
-        height: 220,
-        items: [
-          {
-            id: generateId("item"),
-            label: "Novo item",
-            checked: false,
-          },
-        ],
-      };
-
-    case "IMAGE":
-      return {
-        width: 240,
-        height: 190,
-        label: "Imagem",
-        src: "",
-      };
-
-    case "TEXT":
-    default:
-      return {
-        width: 240,
-        height: 170,
-        label: "Novo texto",
-      };
+  if (type === "CHECKLIST") {
+    return {
+      width: 260, height: 220,
+      items: [{ id: generateId("item"), label: "Novo item", checked: false }],
+    };
   }
+  if (type === "IMAGE") return { width: 240, height: 190, label: "Imagem", src: "" };
+  return { width: 240, height: 170, label: "Novo texto" };
 }
 
 function isTextEditingElement(element) {
-  if (!element) return false;
-
-  const tagName = element.tagName?.toLowerCase();
-  return tagName === "input" || tagName === "textarea" || element.isContentEditable;
+  const tag = element?.tagName?.toLowerCase();
+  return tag === "input" || tag === "textarea" || !!element?.isContentEditable;
 }
 
 function removeRuntimeData(data = {}) {
-  return Object.fromEntries(
-    Object.entries(data || {}).filter(
-      ([key]) =>
-        ![
-          "onChange",
-          "onEditEnd",
-          "onResize",
-          "onResizeStart",
-          "onResizeEnd",
-          "edgeMode",
-          "isEdgeSource",
-          "isSelected",
-        ].includes(key)
-    )
-  );
+  return Object.fromEntries(Object.entries(data).filter(([key]) => ![
+    "onChange", "onEditEnd", "onResize", "onResizeStart", "onResizeEnd",
+    "edgeMode", "isEdgeSource", "isSelected", "editing", "accentColor",
+  ].includes(key)));
 }
 
 function buildFlowPayload(nodes, edges) {
@@ -198,11 +62,12 @@ function buildFlowPayload(nodes, edges) {
       id: edge.id,
       source: edge.source,
       target: edge.target,
+      label: edge.label || "",
     })),
   };
 }
 
-function createFlowSnapshot(nodes, edges) {
+function snapshot(nodes, edges) {
   const payload = buildFlowPayload(nodes, edges);
 
   return {
@@ -210,722 +75,593 @@ function createFlowSnapshot(nodes, edges) {
       ...node,
       position: { ...node.position },
       data: JSON.parse(JSON.stringify(node.data || {})),
-      dragHandle: getDragHandleByType(node.type),
     })),
-    edges: payload.edges.map((edge) => ({
-      ...edge,
-      style: EDGE_STYLE,
-    })),
+    edges: payload.edges.map((edge) => ({ ...edge, style: EDGE_STYLE })),
   };
 }
 
-function serializeSnapshot(snapshot) {
-  return JSON.stringify(buildFlowPayload(snapshot.nodes, snapshot.edges));
+function serialize(value) {
+  return JSON.stringify(buildFlowPayload(value.nodes, value.edges));
 }
 
 function readImageFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-
     reader.onload = () => resolve(reader.result);
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
 }
 
+function getClockText() {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    dateStyle: "short",
+    timeStyle: "medium",
+  }).format(new Date());
+}
+
 export default function MapEditor({ mapa }) {
-  const { logout } = useContext(AuthContext);
+  const { user, logout, updateUser } = useContext(AuthContext);
+  const reactFlow = useReactFlow();
   const imageInputRef = useRef(null);
-
-  const initialNodes = useMemo(
-    () =>
-      (mapa.nodes || []).map((node) => ({
-        id: node.id,
-        type: node.type || "TEXT",
-        position: node.position || { x: 100, y: 100 },
-        data: {
-          ...getInitialDataByType(node.type || "TEXT"),
-          ...(node.data || {}),
-        },
-        dragHandle: getDragHandleByType(node.type || "TEXT"),
-      })),
-    [mapa.nodes]
-  );
-
-  const initialEdges = useMemo(
-    () =>
-      (mapa.edges || []).map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        style: EDGE_STYLE,
-      })),
-    [mapa.edges]
-  );
-
-  const [nodesState, setNodesState] = useState(initialNodes);
-  const [edgesState, setEdgesState] = useState(initialEdges);
-  const nodesRef = useRef(initialNodes);
-  const edgesRef = useRef(initialEdges);
-
-  const setNodes = useCallback((updater) => {
-    setNodesState((currentNodes) => {
-      const nextNodes =
-        typeof updater === "function" ? updater(currentNodes) : updater;
-      nodesRef.current = nextNodes;
-      return nextNodes;
-    });
-  }, []);
-
-  const setEdges = useCallback((updater) => {
-    setEdgesState((currentEdges) => {
-      const nextEdges =
-        typeof updater === "function" ? updater(currentEdges) : updater;
-      edgesRef.current = nextEdges;
-      return nextEdges;
-    });
-  }, []);
-
-  const [edgeMode, setEdgeMode] = useState(false);
-  const [connectionSourceId, setConnectionSourceId] = useState(null);
-  const [selectedNodeId, setSelectedNodeId] = useState(null);
-  const [selectedEdgeId, setSelectedEdgeId] = useState(null);
-  const [nodeMenuOpen, setNodeMenuOpen] = useState(false);
-  const [isImageDragActive, setIsImageDragActive] = useState(false);
-
   const saveTimeoutRef = useRef(null);
   const saveQueueRef = useRef(Promise.resolve());
-  const isLeavingRef = useRef(false);
-
+  const leavingRef = useRef(false);
   const pastRef = useRef([]);
   const futureRef = useRef([]);
-  const pendingDataSnapshotRef = useRef(null);
-  const dataHistoryTimeoutRef = useRef(null);
-  const activeTransactionSnapshotRef = useRef(null);
+  const pendingHistoryRef = useRef(null);
+  const historyTimeoutRef = useRef(null);
+  const transactionRef = useRef(null);
 
-  const reactFlow = useReactFlow();
+  const initialNodes = useMemo(() => (mapa.nodes || []).map((node) => ({
+    id: node.id,
+    type: node.type || "TEXT",
+    position: node.position || { x: 100, y: 100 },
+    data: { ...getInitialDataByType(node.type || "TEXT"), ...(node.data || {}) },
+  })), [mapa.nodes]);
 
-  const captureSnapshot = useCallback(
-    () => createFlowSnapshot(nodesRef.current, edgesRef.current),
-    []
-  );
+  const initialEdges = useMemo(() => (mapa.edges || []).map((edge) => ({
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    label: edge.label || "",
+    style: EDGE_STYLE,
+  })), [mapa.edges]);
 
-  const restoreSnapshot = useCallback(
-    (snapshot) => {
-      setNodes(createFlowSnapshot(snapshot.nodes, snapshot.edges).nodes);
-      setEdges(createFlowSnapshot(snapshot.nodes, snapshot.edges).edges);
-      setSelectedNodeId(null);
-      setSelectedEdgeId(null);
-      setConnectionSourceId(null);
-      setEdgeMode(false);
-      setNodeMenuOpen(false);
-    },
-    [setEdges, setNodes]
-  );
+  const [nodes, setNodesState] = useState(initialNodes);
+  const [edges, setEdgesState] = useState(initialEdges);
+  const nodesRef = useRef(initialNodes);
+  const edgesRef = useRef(initialEdges);
+  const [editingNodeId, setEditingNodeId] = useState(null);
+  const [focusedNodeId, setFocusedNodeId] = useState(null);
+  const [editingEdgeId, setEditingEdgeId] = useState(null);
+  const copiedNodeRef = useRef(null);
+  const [nodeMenuOpen, setNodeMenuOpen] = useState(false);
+  const [edgeMode, setEdgeMode] = useState(false);
+  const [connectionSourceId, setConnectionSourceId] = useState(null);
+  const [isImageDragActive, setIsImageDragActive] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [clock, setClock] = useState(getClockText());
+  const [noteOpen, setNoteOpen] = useState(!!mapa.nota_flutuante);
+  const [note, setNote] = useState(mapa.nota_flutuante || "");
+  const [calendarEnabled, setCalendarEnabled] = useState(mapa.relogio_ativo !== false);
+  const [noteEnabled, setNoteEnabled] = useState(mapa.nota_flutuante_ativa !== false);
+  const [accentColor, setAccentColor] = useState(user?.cor_mapa || "#48abb3");
 
-  const pushPastSnapshot = useCallback((snapshot, compareWithCurrent = true) => {
-    const currentSnapshot = createFlowSnapshot(
-      nodesRef.current,
-      edgesRef.current
-    );
+  const setNodes = useCallback((updater) => setNodesState((current) => {
+    const next = typeof updater === "function" ? updater(current) : updater;
+    nodesRef.current = next;
+    return next;
+  }), []);
 
-    if (
-      compareWithCurrent &&
-      serializeSnapshot(snapshot) === serializeSnapshot(currentSnapshot)
-    ) {
-      return;
-    }
+  const setEdges = useCallback((updater) => setEdgesState((current) => {
+    const next = typeof updater === "function" ? updater(current) : updater;
+    edgesRef.current = next;
+    return next;
+  }), []);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty("--bw-accent", accentColor);
+  }, [accentColor]);
+
+  useEffect(() => {
+    const id = setInterval(() => setClock(getClockText()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (user?.cor_mapa) setAccentColor(user.cor_mapa);
+  }, [user?.cor_mapa]);
+
+  const capture = useCallback(() => snapshot(nodesRef.current, edgesRef.current), []);
+
+  const pushHistory = useCallback((item, compare = true) => {
+    if (compare && serialize(item) === serialize(capture())) return;
 
     const past = pastRef.current;
-    const lastSnapshot = past[past.length - 1];
-
-    if (!lastSnapshot || serializeSnapshot(lastSnapshot) !== serializeSnapshot(snapshot)) {
-      past.push(snapshot);
-    }
-
-    if (past.length > HISTORY_LIMIT) {
-      past.splice(0, past.length - HISTORY_LIMIT);
-    }
-
+    if (!past.length || serialize(past[past.length - 1]) !== serialize(item)) past.push(item);
+    if (past.length > HISTORY_LIMIT) past.splice(0, past.length - HISTORY_LIMIT);
     futureRef.current = [];
-  }, []);
+  }, [capture]);
 
-  const commitPendingDataHistory = useCallback(() => {
-    if (dataHistoryTimeoutRef.current) {
-      clearTimeout(dataHistoryTimeoutRef.current);
-      dataHistoryTimeoutRef.current = null;
+  const commitHistory = useCallback(() => {
+    if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
+    historyTimeoutRef.current = null;
+
+    if (pendingHistoryRef.current) {
+      pushHistory(pendingHistoryRef.current);
+      pendingHistoryRef.current = null;
     }
-
-    const pendingSnapshot = pendingDataSnapshotRef.current;
-    pendingDataSnapshotRef.current = null;
-
-    if (pendingSnapshot) {
-      pushPastSnapshot(pendingSnapshot);
-    }
-  }, [pushPastSnapshot]);
+  }, [pushHistory]);
 
   const beginDataHistory = useCallback(() => {
-    if (activeTransactionSnapshotRef.current) return;
-
-    if (!pendingDataSnapshotRef.current) {
-      pendingDataSnapshotRef.current = captureSnapshot();
-      futureRef.current = [];
+    if (!pendingHistoryRef.current && !transactionRef.current) {
+      pendingHistoryRef.current = capture();
     }
 
-    if (dataHistoryTimeoutRef.current) {
-      clearTimeout(dataHistoryTimeoutRef.current);
+    if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
+    historyTimeoutRef.current = setTimeout(commitHistory, DATA_HISTORY_DELAY);
+  }, [capture, commitHistory]);
+
+  const beginTransaction = useCallback(() => {
+    commitHistory();
+    if (!transactionRef.current) transactionRef.current = capture();
+  }, [capture, commitHistory]);
+
+  const finishTransaction = useCallback(() => {
+    if (transactionRef.current) {
+      pushHistory(transactionRef.current);
+      transactionRef.current = null;
     }
-
-    dataHistoryTimeoutRef.current = setTimeout(
-      commitPendingDataHistory,
-      DATA_HISTORY_DELAY
-    );
-  }, [captureSnapshot, commitPendingDataHistory]);
-
-  const startHistoryTransaction = useCallback(() => {
-    commitPendingDataHistory();
-
-    if (!activeTransactionSnapshotRef.current) {
-      activeTransactionSnapshotRef.current = captureSnapshot();
-      futureRef.current = [];
-    }
-  }, [captureSnapshot, commitPendingDataHistory]);
-
-  const finishHistoryTransaction = useCallback(() => {
-    const transactionSnapshot = activeTransactionSnapshotRef.current;
-    activeTransactionSnapshotRef.current = null;
-
-    if (transactionSnapshot) {
-      pushPastSnapshot(transactionSnapshot);
-    }
-  }, [pushPastSnapshot]);
+  }, [pushHistory]);
 
   const undo = useCallback(() => {
-    if (activeTransactionSnapshotRef.current) {
-      finishHistoryTransaction();
-    }
+    finishTransaction();
+    commitHistory();
 
-    if (pendingDataSnapshotRef.current) {
-      if (dataHistoryTimeoutRef.current) {
-        clearTimeout(dataHistoryTimeoutRef.current);
-        dataHistoryTimeoutRef.current = null;
-      }
+    const previous = pastRef.current.pop();
+    if (!previous) return;
 
-      const previousSnapshot = pendingDataSnapshotRef.current;
-      pendingDataSnapshotRef.current = null;
-      futureRef.current.push(captureSnapshot());
-      restoreSnapshot(previousSnapshot);
-      return;
-    }
-
-    const previousSnapshot = pastRef.current.pop();
-    if (!previousSnapshot) return;
-
-    futureRef.current.push(captureSnapshot());
-    restoreSnapshot(previousSnapshot);
-  }, [captureSnapshot, finishHistoryTransaction, restoreSnapshot]);
+    futureRef.current.push(capture());
+    setNodes(previous.nodes);
+    setEdges(previous.edges);
+    setEditingNodeId(null);
+    setEditingEdgeId(null);
+  }, [capture, commitHistory, finishTransaction, setEdges, setNodes]);
 
   const redo = useCallback(() => {
-    commitPendingDataHistory();
+    commitHistory();
 
-    const nextSnapshot = futureRef.current.pop();
-    if (!nextSnapshot) return;
+    const next = futureRef.current.pop();
+    if (!next) return;
 
-    pastRef.current.push(captureSnapshot());
-    restoreSnapshot(nextSnapshot);
-  }, [captureSnapshot, commitPendingDataHistory, restoreSnapshot]);
+    pastRef.current.push(capture());
+    setNodes(next.nodes);
+    setEdges(next.edges);
+    setEditingNodeId(null);
+    setEditingEdgeId(null);
+  }, [capture, commitHistory, setEdges, setNodes]);
 
-  const recordImmediateChange = useCallback(() => {
-    commitPendingDataHistory();
-    pushPastSnapshot(captureSnapshot(), false);
-  }, [captureSnapshot, commitPendingDataHistory, pushPastSnapshot]);
+  const screenToFlowPosition = useCallback((point) => {
+    if (reactFlow.screenToFlowPosition) return reactFlow.screenToFlowPosition(point);
+    return reactFlow.project(point);
+  }, [reactFlow]);
 
-  const screenToFlowPosition = useCallback(
-    (point) => {
-      if (typeof reactFlow.screenToFlowPosition === "function") {
-        return reactFlow.screenToFlowPosition(point);
-      }
-
-      if (typeof reactFlow.project === "function") {
-        return reactFlow.project(point);
-      }
-
-      return { x: 200, y: 200 };
-    },
-    [reactFlow]
+  const center = useCallback(
+    () => screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }),
+    [screenToFlowPosition]
   );
 
-  const getViewportCenterPosition = useCallback(() => {
-    return screenToFlowPosition({
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 2,
-    });
-  }, [screenToFlowPosition]);
+  const updateNodeData = useCallback((id, partial) => {
+    beginDataHistory();
+    setNodes((items) => items.map((node) => node.id === id
+      ? { ...node, data: { ...node.data, ...partial } }
+      : node
+    ));
+  }, [beginDataHistory, setNodes]);
 
-  const updateNodeData = useCallback(
-    (nodeId, partialData) => {
-      beginDataHistory();
-      setNodes((nodes) =>
-        nodes.map((node) =>
-          node.id === nodeId
-            ? {
-                ...node,
-                data: {
-                  ...node.data,
-                  ...partialData,
-                },
-              }
-            : node
-        )
-      );
-    },
-    [beginDataHistory, setNodes]
-  );
+  const resizeNodeData = useCallback((id, partial) => setNodes((items) => items.map(
+    (node) => node.id === id
+      ? { ...node, data: { ...node.data, ...partial } }
+      : node
+  )), [setNodes]);
 
-  const resizeNodeData = useCallback(
-    (nodeId, partialData) => {
-      setNodes((nodes) =>
-        nodes.map((node) =>
-          node.id === nodeId
-            ? {
-                ...node,
-                data: {
-                  ...node.data,
-                  ...partialData,
-                },
-              }
-            : node
-        )
-      );
-    },
-    [setNodes]
-  );
-
-  const createNode = useCallback(
-    (type, position, customData = {}) => {
-      recordImmediateChange();
-
-      const newNode = {
-        id: generateId("node"),
-        type,
-        position,
-        data: {
-          ...getInitialDataByType(type),
-          ...customData,
-        },
-        dragHandle: getDragHandleByType(type),
-      };
-
-      setNodes((nodes) => nodes.concat(newNode));
-      setSelectedNodeId(newNode.id);
-      setSelectedEdgeId(null);
-      setNodeMenuOpen(false);
-    },
-    [recordImmediateChange, setNodes]
-  );
-
-  const addNode = useCallback(
-    (type, customData = {}) => {
-      const center = getViewportCenterPosition();
-      const offset = (nodesRef.current.length % 6) * 24;
-
-      createNode(
-        type,
-        {
-          x: center.x + offset,
-          y: center.y + offset,
-        },
-        customData
-      );
-    },
-    [createNode, getViewportCenterPosition]
-  );
-
-  const requestImageFile = useCallback(() => {
+  const enterNodeEdit = useCallback((id) => {
+    setFocusedNodeId(id);
+    setEditingNodeId(id);
+    setEditingEdgeId(null);
     setNodeMenuOpen(false);
-    imageInputRef.current?.click();
   }, []);
 
-  const createImageNodeFromFile = useCallback(
-    async (file, position) => {
-      if (!file.type.startsWith("image/")) {
-        alert("Escolha um arquivo de imagem válido.");
-        return;
-      }
+  const leaveEditing = useCallback(() => {
+    commitHistory();
+    setEditingNodeId(null);
+    setEditingEdgeId(null);
+  }, [commitHistory]);
 
-      if (file.size > IMAGE_MAX_BYTES) {
-        alert("Imagem muito grande. Escolha um arquivo com até 4 MB.");
-        return;
-      }
+  const createNode = useCallback((type, position, data = {}) => {
+    pushHistory(capture(), false);
 
-      try {
-        const src = await readImageFileAsDataUrl(file);
-        const imageData = {
-          label: file.name,
-          src,
-          mimeType: file.type,
-          size: file.size,
-        };
+    const node = {
+      id: generateId("node"),
+      type,
+      position,
+      data: { ...getInitialDataByType(type), ...data },
+    };
 
-        if (position) {
-          createNode("IMAGE", position, imageData);
-        } else {
-          addNode("IMAGE", imageData);
+    setNodes((items) => [...items, node]);
+    setFocusedNodeId(node.id);
+    setEditingNodeId(node.id);
+    setEditingEdgeId(null);
+    setNodeMenuOpen(false);
+  }, [capture, pushHistory, setNodes]);
+
+  const addNode = useCallback((type, data = {}) => {
+    const p = center();
+    const offset = (nodesRef.current.length % 6) * 24;
+    createNode(type, { x: p.x + offset, y: p.y + offset }, data);
+  }, [center, createNode]);
+
+  const createImageNodeFromFile = useCallback(async (file, position) => {
+    if (!file?.type?.startsWith("image/")) {
+      return alert("Escolha um arquivo de imagem válido.");
+    }
+
+    if (file.size > IMAGE_MAX_BYTES) {
+      return alert("Imagem muito grande. Escolha um arquivo com até 4 MB.");
+    }
+
+    try {
+      const src = await readImageFileAsDataUrl(file);
+      createNode(
+        "IMAGE",
+        position || center(),
+        { label: file.name, src, mimeType: file.type, size: file.size }
+      );
+    } catch (error) {
+      console.error(error);
+      alert("Não foi possível carregar a imagem selecionada.");
+    }
+  }, [center, createNode]);
+
+  const handleImageSelected = useCallback(async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) await createImageNodeFromFile(file);
+  }, [createImageNodeFromFile]);
+
+  const createTextFromClipboard = useCallback(async () => {
+    try {
+      const items = await navigator.clipboard.read?.();
+
+      if (items) {
+        for (const item of items) {
+          const imageType = item.types.find((type) => type.startsWith("image/"));
+
+          if (imageType) {
+            const blob = await item.getType(imageType);
+            const file = new File([blob], "imagem-colada", { type: imageType });
+            await createImageNodeFromFile(file);
+            return true;
+          }
         }
-      } catch (error) {
-        console.error("Erro ao carregar imagem:", error);
-        alert("Não foi possível carregar a imagem selecionada.");
       }
-    },
-    [addNode, createNode]
-  );
 
-  const handleImageSelected = useCallback(
-    async (event) => {
-      const file = event.target.files?.[0];
-      event.target.value = "";
-
-      if (file) {
-        await createImageNodeFromFile(file);
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        createNode("TEXT", center(), { label: text });
+        return true;
       }
-    },
-    [createImageNodeFromFile]
-  );
+    } catch (error) {
+      console.warn("Clipboard indisponível:", error);
+    }
 
-  const handleImageDragOver = useCallback((event) => {
-    const dragTypes = Array.from(event.dataTransfer?.types || []);
-    if (!dragTypes.includes("Files")) return;
+    return false;
+  }, [center, createImageNodeFromFile, createNode]);
 
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-    setIsImageDragActive(true);
-  }, []);
+  const deleteNode = useCallback((id) => {
+    pushHistory(capture(), false);
+    setNodes((items) => items.filter((n) => n.id !== id));
+    setEdges((items) => items.filter((e) => e.source !== id && e.target !== id));
+    setEditingNodeId(null);
+    setFocusedNodeId(null);
+  }, [capture, pushHistory, setEdges, setNodes]);
 
-  const handleImageDragLeave = useCallback((event) => {
-    if (event.currentTarget.contains(event.relatedTarget)) return;
-    setIsImageDragActive(false);
-  }, []);
+  const deleteEdge = useCallback((id) => {
+    pushHistory(capture(), false);
+    setEdges((items) => items.filter((e) => e.id !== id));
+    setEditingEdgeId(null);
+  }, [capture, pushHistory, setEdges]);
 
-  const handleImageDrop = useCallback(
-    async (event) => {
-      event.preventDefault();
-      setIsImageDragActive(false);
+  const createEdgeBetweenNodes = useCallback((source, target) => {
+    if (!source || !target || source === target) return;
 
-      const imageFile = Array.from(event.dataTransfer?.files || []).find(
-        (file) => file.type.startsWith("image/")
-      );
+    if (edgesRef.current.some((e) =>
+      (e.source === source && e.target === target) ||
+      (e.source === target && e.target === source)
+    )) return;
 
-      if (!imageFile) return;
-
-      const dropPosition = screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      });
-
-      await createImageNodeFromFile(imageFile, {
-        x: dropPosition.x - 120,
-        y: dropPosition.y - 95,
-      });
-    },
-    [createImageNodeFromFile, screenToFlowPosition]
-  );
-
-  const deleteNode = useCallback(
-    (nodeId) => {
-      if (!nodeId) return;
-
-      recordImmediateChange();
-      setNodes((nodes) => nodes.filter((node) => node.id !== nodeId));
-      setEdges((edges) =>
-        edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
-      );
-
-      setSelectedNodeId(null);
-      setSelectedEdgeId(null);
-
-      if (connectionSourceId === nodeId) {
-        setConnectionSourceId(null);
-      }
-    },
-    [connectionSourceId, recordImmediateChange, setEdges, setNodes]
-  );
-
-  const deleteEdge = useCallback(
-    (edgeId) => {
-      if (!edgeId) return;
-
-      recordImmediateChange();
-      setEdges((edges) => edges.filter((edge) => edge.id !== edgeId));
-      setSelectedEdgeId(null);
-    },
-    [recordImmediateChange, setEdges]
-  );
-
-  const createEdgeBetweenNodes = useCallback(
-    (sourceId, targetId) => {
-      if (!sourceId || !targetId || sourceId === targetId) return;
-
-      const edgeAlreadyExists = edgesRef.current.some(
-        (edge) =>
-          (edge.source === sourceId && edge.target === targetId) ||
-          (edge.source === targetId && edge.target === sourceId)
-      );
-
-      if (edgeAlreadyExists) return;
-
-      recordImmediateChange();
-      setEdges((edges) =>
-        addEdge(
-          {
-            id: generateId("edge"),
-            source: sourceId,
-            target: targetId,
-            style: EDGE_STYLE,
-          },
-          edges
-        )
-      );
-    },
-    [recordImmediateChange, setEdges]
-  );
+    pushHistory(capture(), false);
+    setEdges((items) => addEdge({
+      id: generateId("edge"),
+      source,
+      target,
+      style: EDGE_STYLE,
+      label: "",
+    }, items));
+  }, [capture, pushHistory, setEdges]);
 
   const onConnect = useCallback(
-    (connection) => {
-      createEdgeBetweenNodes(connection.source, connection.target);
-    },
+    (connection) => createEdgeBetweenNodes(connection.source, connection.target),
     [createEdgeBetweenNodes]
   );
 
-  const toggleEdgeMode = useCallback(() => {
-    setEdgeMode((current) => !current);
-    setConnectionSourceId(null);
-    setNodeMenuOpen(false);
-  }, []);
-
-  const cancelEdgeMode = useCallback(() => {
-    setEdgeMode(false);
-    setConnectionSourceId(null);
-  }, []);
-
-  const onNodeClick = useCallback(
-    (event, node) => {
-      setSelectedNodeId(node.id);
-      setSelectedEdgeId(null);
-      setNodeMenuOpen(false);
-
-      if (!edgeMode) return;
-
+  const onNodeClick = useCallback((event, node) => {
+    if (edgeMode) {
       event.stopPropagation();
 
       if (!connectionSourceId) {
         setConnectionSourceId(node.id);
-        return;
+      } else {
+        createEdgeBetweenNodes(connectionSourceId, node.id);
+        setConnectionSourceId(null);
+        setEdgeMode(false);
       }
 
-      createEdgeBetweenNodes(connectionSourceId, node.id);
-      setConnectionSourceId(null);
-      setEdgeMode(false);
-    },
-    [connectionSourceId, createEdgeBetweenNodes, edgeMode]
-  );
+      return;
+    }
+
+    setFocusedNodeId(node.id);
+    if (editingNodeId === node.id) return;
+    setEditingEdgeId(null);
+  }, [connectionSourceId, createEdgeBetweenNodes, edgeMode, editingNodeId]);
+
+  const onNodeDoubleClick = useCallback((event, node) => {
+    event.stopPropagation();
+    enterNodeEdit(node.id);
+  }, [enterNodeEdit]);
 
   const onPaneClick = useCallback(() => {
-    setSelectedNodeId(null);
-    setSelectedEdgeId(null);
+    setFocusedNodeId(null);
     setNodeMenuOpen(false);
+    setConnectionSourceId(null);
+    setEdgeMode(false);
+    leaveEditing();
+  }, [leaveEditing]);
 
-    if (edgeMode) {
-      setConnectionSourceId(null);
-    }
-  }, [edgeMode]);
+  const onEdgeClick = useCallback((event, edge) => {
+    event.stopPropagation();
+    setEditingNodeId(null);
+    setEditingEdgeId(null);
+  }, []);
 
-  const onSelectionChange = useCallback(
-    ({ nodes: selectedNodes, edges: selectedEdges }) => {
-      setSelectedNodeId(selectedNodes[0]?.id || null);
-      setSelectedEdgeId(selectedEdges[0]?.id || null);
-    },
-    []
-  );
+  const onEdgeDoubleClick = useCallback((event, edge) => {
+    event.stopPropagation();
+    setEditingNodeId(null);
+    setEditingEdgeId(edge.id);
+  }, []);
 
-  const onNodesChange = useCallback(
-    (changes) => {
-      setNodes((nodes) => applyNodeChanges(changes, nodes));
-    },
-    [setNodes]
-  );
+  const onNodesChange = useCallback((changes) => {
+    const allowed = editingNodeId
+      ? changes
+      : changes.filter((change) =>
+        change.type !== "position" &&
+        change.type !== "dimensions" &&
+        change.type !== "select"
+      );
 
-  const onEdgesChange = useCallback(
-    (changes) => {
-      const hasRemoval = changes.some((change) => change.type === "remove");
-      if (hasRemoval) {
-        recordImmediateChange();
-      }
+    setNodes((items) => applyNodeChanges(allowed, items));
+  }, [editingNodeId, setNodes]);
 
-      setEdges((edges) => applyEdgeChanges(changes, edges));
-    },
-    [recordImmediateChange, setEdges]
-  );
+  const onEdgesChange = useCallback((changes) => {
+    if (changes.some((c) => c.type === "remove")) pushHistory(capture(), false);
+    setEdges((items) => applyEdgeChanges(changes, items));
+  }, [capture, pushHistory, setEdges]);
 
-  const nodesWithHandlers = useMemo(
-    () =>
-      nodesState.map((node) => ({
-        ...node,
-        dragHandle: getDragHandleByType(node.type || "TEXT"),
-        data: {
-          ...node.data,
-          onChange: updateNodeData,
-          onEditEnd: commitPendingDataHistory,
-          onResize: resizeNodeData,
-          onResizeStart: startHistoryTransaction,
-          onResizeEnd: finishHistoryTransaction,
-          edgeMode,
-          isEdgeSource: node.id === connectionSourceId,
-          isSelected: node.id === selectedNodeId,
-        },
-      })),
-    [
-      commitPendingDataHistory,
-      connectionSourceId,
+  const updateEdgeLabel = useCallback((id, label) => {
+    beginDataHistory();
+    setEdges((items) => items.map((edge) =>
+      edge.id === id ? { ...edge, label } : edge
+    ));
+  }, [beginDataHistory, setEdges]);
+
+  const nodesWithHandlers = useMemo(() => nodes.map((node) => ({
+    ...node,
+    selected: false,
+    draggable: editingNodeId === node.id,
+    data: {
+      ...node.data,
+      accentColor,
+      editing: editingNodeId === node.id,
       edgeMode,
-      finishHistoryTransaction,
-      nodesState,
-      resizeNodeData,
-      selectedNodeId,
-      startHistoryTransaction,
-      updateNodeData,
-    ]
-  );
-
-  const queueSave = useCallback(
-    (payload) => {
-      const nextSave = saveQueueRef.current
-        .catch(() => undefined)
-        .then(() => salvarMapa(mapa.id, payload));
-
-      saveQueueRef.current = nextSave;
-      return nextSave;
+      isEdgeSource: node.id === connectionSourceId,
+      onChange: updateNodeData,
+      onEditEnd: leaveEditing,
+      onResize: resizeNodeData,
+      onResizeStart: beginTransaction,
+      onResizeEnd: finishTransaction,
     },
-    [mapa.id]
+  })), [
+    accentColor, beginTransaction, connectionSourceId, edgeMode,
+    editingNodeId, finishTransaction, leaveEditing, nodes,
+    resizeNodeData, updateNodeData,
+  ]);
+
+  const queueSave = useCallback((payload) => {
+    const next = saveQueueRef.current
+      .catch(() => undefined)
+      .then(() => salvarMapa(mapa.id, payload));
+
+    saveQueueRef.current = next;
+    return next;
+  }, [mapa.id]);
+
+  const saveCurrent = useCallback(
+    () => queueSave(buildFlowPayload(nodesRef.current, edgesRef.current)),
+    [queueSave]
   );
 
-  const saveCurrentFlow = useCallback(() => {
-    return queueSave(buildFlowPayload(nodesRef.current, edgesRef.current));
-  }, [queueSave]);
+  const saveMapSettings = useCallback(async (next) => {
+    const data = await salvarConfiguracaoMapa(mapa.id, next);
 
-  const handleSaveAndLogout = useCallback(async () => {
-    isLeavingRef.current = true;
+    setNoteEnabled(data.nota_flutuante_ativa !== false);
+    setCalendarEnabled(data.relogio_ativo !== false);
+    setNote(data.nota_flutuante || "");
+  }, [mapa.id]);
 
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = null;
-    }
+  const cycleColor = useCallback(async () => {
+    const index = COLORS.indexOf((accentColor || "#48abb3").toLowerCase());
+    const nextColor = COLORS[(index + 1) % COLORS.length];
 
-    commitPendingDataHistory();
+    setAccentColor(nextColor);
+    updateUser({ cor_mapa: nextColor });
 
     try {
-      await saveQueueRef.current.catch(() => undefined);
-      await saveCurrentFlow();
+      await atualizarPreferenciasUsuario({ cor_mapa: nextColor });
     } catch (error) {
-      console.error("Erro ao salvar antes de sair:", error);
-    } finally {
-      logout();
+      console.error("Erro ao salvar cor do mapa:", error);
     }
-  }, [commitPendingDataHistory, logout, saveCurrentFlow]);
+  }, [accentColor, updateUser]);
+
+  const handleLogout = useCallback(async () => {
+    leavingRef.current = true;
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    commitHistory();
+
+    await saveQueueRef.current.catch(() => undefined);
+    await saveCurrent().catch(() => undefined);
+    logout();
+  }, [commitHistory, logout, saveCurrent]);
 
   useEffect(() => {
-    const handleKeyDown = (event) => {
-      const modifierPressed = event.ctrlKey || event.metaKey;
+    const handler = async (event) => {
+      const modifier = event.ctrlKey || event.metaKey;
       const key = event.key.toLowerCase();
 
-      if (modifierPressed && !event.altKey) {
-        if (isTextEditingElement(event.target)) return;
-
-        const isUndo = key === "z" && !event.shiftKey;
-        const isRedo = key === "y" || (key === "z" && event.shiftKey);
-
-        if (isUndo) {
+      if (modifier && !event.altKey) {
+        if (key === "z" && !event.shiftKey && !isTextEditingElement(event.target)) {
           event.preventDefault();
           undo();
           return;
         }
 
-        if (isRedo) {
+        if (
+          (key === "y" || (key === "z" && event.shiftKey)) &&
+          !isTextEditingElement(event.target)
+        ) {
           event.preventDefault();
           redo();
           return;
         }
+
+        if (key === "c" && !isTextEditingElement(event.target)) {
+          const node = nodesRef.current.find((n) => n.id === focusedNodeId);
+
+          if (node) {
+            event.preventDefault();
+            copiedNodeRef.current = JSON.parse(
+              JSON.stringify({ ...node, data: removeRuntimeData(node.data) })
+            );
+          }
+
+          return;
+        }
+
+        if (key === "v" && !isTextEditingElement(event.target)) {
+          event.preventDefault();
+
+          if (copiedNodeRef.current) {
+            const original = copiedNodeRef.current;
+            const clone = {
+              ...original,
+              id: generateId("node"),
+              position: {
+                x: original.position.x + 36,
+                y: original.position.y + 36,
+              },
+              data: JSON.parse(JSON.stringify(original.data || {})),
+            };
+
+            pushHistory(capture(), false);
+            setNodes((items) => [...items, clone]);
+            setFocusedNodeId(clone.id);
+            setEditingNodeId(clone.id);
+          } else {
+            await createTextFromClipboard();
+          }
+
+          return;
+        }
       }
 
-      if (event.key === "Escape" && edgeMode) {
+      if (
+        (event.key === "Delete" || event.key === "Backspace") &&
+        !isTextEditingElement(event.target)
+      ) {
         event.preventDefault();
-        cancelEdgeMode();
-        return;
+        if (editingNodeId) deleteNode(editingNodeId);
+        else if (editingEdgeId) deleteEdge(editingEdgeId);
       }
 
-      if (event.key !== "Delete" && event.key !== "Backspace") return;
-      if (isTextEditingElement(event.target)) return;
-
-      event.preventDefault();
-
-      if (selectedNodeId) {
-        deleteNode(selectedNodeId);
-      } else if (selectedEdgeId) {
-        deleteEdge(selectedEdgeId);
+      if (event.key === "Escape") {
+        setEdgeMode(false);
+        setConnectionSourceId(null);
+        leaveEditing();
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, [
-    cancelEdgeMode,
-    deleteEdge,
-    deleteNode,
-    edgeMode,
-    redo,
-    selectedEdgeId,
-    selectedNodeId,
-    undo,
+    createTextFromClipboard, deleteEdge, deleteNode, editingEdgeId,
+    editingNodeId, focusedNodeId, leaveEditing, pushHistory,
+    redo, setNodes, undo, capture,
   ]);
 
   useEffect(() => {
-    if (!mapa?.id || isLeavingRef.current) return;
+    if (!mapa?.id || leavingRef.current) return;
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(
+      () => queueSave(buildFlowPayload(nodes, edges)).catch(console.error),
+      2500
+    );
+
+    return () => clearTimeout(saveTimeoutRef.current);
+  }, [edges, mapa?.id, nodes, queueSave]);
+
+  useEffect(() => () => {
+    if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+  }, []);
+
+  const handleWheel = useCallback((event) => {
+    if (event.target.closest?.("textarea,input,button")) return;
+    event.preventDefault();
+
+    const viewport = reactFlow.getViewport();
+    const rect = event.currentTarget.getBoundingClientRect();
+
+    if (event.ctrlKey) {
+      const factor = event.deltaY < 0 ? 1.08 : 0.92;
+      const nextZoom = Math.min(4, Math.max(0.2, viewport.zoom * factor));
+      const px = event.clientX - rect.left;
+      const py = event.clientY - rect.top;
+
+      reactFlow.setViewport({
+        x: px - (px - viewport.x) * (nextZoom / viewport.zoom),
+        y: py - (py - viewport.y) * (nextZoom / viewport.zoom),
+        zoom: nextZoom,
+      });
+      return;
     }
 
-    const payload = buildFlowPayload(nodesState, edgesState);
-
-    saveTimeoutRef.current = setTimeout(() => {
-      queueSave(payload).catch((error) => {
-        console.error("Erro ao salvar mapa:", error);
-      });
-    }, 2500);
-
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, [edgesState, mapa?.id, nodesState, queueSave]);
-
-  useEffect(() => {
-    return () => {
-      if (dataHistoryTimeoutRef.current) {
-        clearTimeout(dataHistoryTimeoutRef.current);
-      }
-
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, []);
+    reactFlow.setViewport({ ...viewport, y: viewport.y - event.deltaY });
+  }, [reactFlow]);
 
   return (
     <div
-      onDragOver={handleImageDragOver}
-      onDragLeave={handleImageDragLeave}
-      onDrop={handleImageDrop}
       style={{
         width: "100vw",
         height: "100vh",
@@ -933,29 +669,59 @@ export default function MapEditor({ mapa }) {
         position: "relative",
         overflow: "hidden",
       }}
+      onWheel={handleWheel}
+      onDragOver={(e) => {
+        if ([...(e.dataTransfer?.types || [])].includes("Files")) {
+          e.preventDefault();
+          setIsImageDragActive(true);
+        }
+      }}
+      onDragLeave={() => setIsImageDragActive(false)}
+      onDrop={async (e) => {
+        e.preventDefault();
+        setIsImageDragActive(false);
+
+        const file = [...(e.dataTransfer?.files || [])]
+          .find((f) => f.type.startsWith("image/"));
+
+        if (file) {
+          await createImageNodeFromFile(
+            file,
+            screenToFlowPosition({ x: e.clientX, y: e.clientY })
+          );
+        }
+      }}
     >
-      <div style={toolbarStyle}>
+      <div
+        style={{
+          position: "absolute",
+          top: 12,
+          left: 12,
+          right: 12,
+          zIndex: 30,
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+          pointerEvents: "none",
+        }}
+      >
         <div style={{ position: "relative", pointerEvents: "auto" }}>
           <button
-            style={buttonStyle}
-            onClick={() => setNodeMenuOpen((open) => !open)}
-            aria-expanded={nodeMenuOpen}
+            className="bw-toolbar-button"
+            onClick={() => setNodeMenuOpen((v) => !v)}
           >
             + adicionar nó
           </button>
 
           {nodeMenuOpen && (
-            <div style={nodeMenuStyle}>
-              <button style={nodeMenuButtonStyle} onClick={() => addNode("TEXT")}>
+            <div className="bw-node-menu">
+              <button className="bw-menu-button" onClick={() => addNode("TEXT")}>
                 caixa de texto
               </button>
-              <button
-                style={nodeMenuButtonStyle}
-                onClick={() => addNode("CHECKLIST")}
-              >
+              <button className="bw-menu-button" onClick={() => addNode("CHECKLIST")}>
                 lista
               </button>
-              <button style={nodeMenuButtonStyle} onClick={requestImageFile}>
+              <button className="bw-menu-button" onClick={() => imageInputRef.current?.click()}>
                 imagem
               </button>
             </div>
@@ -971,99 +737,153 @@ export default function MapEditor({ mapa }) {
         />
 
         <button
-          style={edgeMode ? activeButtonStyle : buttonStyle}
-          onClick={toggleEdgeMode}
-          aria-pressed={edgeMode}
+          className="bw-toolbar-button"
+          onClick={() => {
+            setEdgeMode((v) => !v);
+            setConnectionSourceId(null);
+          }}
         >
           {edgeMode ? "conexão ativa" : "conectar nós"}
         </button>
 
-        {edgeMode && (
-          <button style={buttonStyle} onClick={cancelEdgeMode}>
-            cancelar
-          </button>
-        )}
+        <button
+          className="bw-toolbar-button"
+          onClick={() => setSettingsOpen((v) => !v)}
+        >
+          editar mapa
+        </button>
 
-        {selectedNodeId && !edgeMode && (
-          <button style={dangerButtonStyle} onClick={() => deleteNode(selectedNodeId)}>
-            excluir nó
-          </button>
-        )}
-
-        {selectedEdgeId && !selectedNodeId && !edgeMode && (
-          <button style={dangerButtonStyle} onClick={() => deleteEdge(selectedEdgeId)}>
-            excluir conexão
-          </button>
-        )}
-
-        {edgeMode && (
-          <span style={statusStyle}>
-            {connectionSourceId
-              ? "Origem marcada. Toque em qualquer área do nó de destino."
-              : "Modo de conexão ativo: toque em qualquer área do primeiro nó."}
-          </span>
-        )}
-
-        <button style={logoutButtonStyle} onClick={handleSaveAndLogout}>
+        <button className="bw-toolbar-button bw-logout" onClick={handleLogout}>
           salvar e sair
         </button>
       </div>
 
-      {isImageDragActive && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 18,
-            zIndex: 25,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            border: "3px dashed rgba(255,255,255,0.82)",
-            borderRadius: 14,
-            background: "rgba(72,171,179,0.2)",
-            color: "white",
-            fontSize: 18,
-            fontWeight: 700,
-            pointerEvents: "none",
-          }}
-        >
-          solte a imagem para criar um nó
+      {settingsOpen && (
+        <div className="bw-map-settings">
+          <button className="bw-settings-action" onClick={cycleColor}>
+            mudar cor do mapa
+          </button>
+
+          <label>
+            <input
+              type="checkbox"
+              checked={noteEnabled}
+              onChange={async (e) => {
+                const value = e.target.checked;
+                setNoteEnabled(value);
+                await saveMapSettings({ nota_flutuante_ativa: value });
+              }}
+            />
+            nota flutuante
+          </label>
+
+          <label>
+            <input
+              type="checkbox"
+              checked={calendarEnabled}
+              onChange={async (e) => {
+                const value = e.target.checked;
+                setCalendarEnabled(value);
+                await saveMapSettings({ relogio_ativo: value });
+              }}
+            />
+            calendário / relógio
+          </label>
         </div>
+      )}
+
+      {noteEnabled && (
+        <div
+          className={`bw-floating-note ${noteOpen ? "open" : ""}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {noteOpen ? (
+            <textarea
+              autoFocus
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              onBlur={async () => {
+                setNoteOpen(false);
+                await saveMapSettings({ nota_flutuante: note });
+              }}
+              placeholder="nota rápida..."
+            />
+          ) : (
+            <button aria-label="Abrir nota" onClick={() => setNoteOpen(true)}>
+              ✎
+            </button>
+          )}
+        </div>
+      )}
+
+      {calendarEnabled && <div className="bw-map-clock">{clock}</div>}
+      {isImageDragActive && (
+        <div className="bw-image-drop">solte a imagem para criar um nó</div>
       )}
 
       <ReactFlow
         nodes={nodesWithHandlers}
-        edges={edgesState}
+        edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeClick={onNodeClick}
-        onNodeDragStart={startHistoryTransaction}
-        onNodeDragStop={finishHistoryTransaction}
+        onNodeDoubleClick={onNodeDoubleClick}
+        onNodeDragStart={beginTransaction}
+        onNodeDragStop={finishTransaction}
         onPaneClick={onPaneClick}
-        onSelectionChange={onSelectionChange}
+        onEdgeClick={onEdgeClick}
+        onEdgeDoubleClick={onEdgeDoubleClick}
         nodeTypes={nodeTypes}
         fitView
-        defaultEdgeOptions={{ style: EDGE_STYLE }}
+        defaultEdgeOptions={{ style: EDGE_STYLE, type: "default" }}
         connectionLineStyle={EDGE_STYLE}
-        connectionRadius={40}
-        nodesConnectable={!edgeMode}
-        nodesDraggable={!edgeMode}
+        nodesConnectable={edgeMode}
+        nodesDraggable={!!editingNodeId}
+        elementsSelectable={false}
         deleteKeyCode={null}
-        zoomOnPinch
         panOnDrag
+        zoomOnScroll={false}
+        zoomOnPinch
         style={{ cursor: edgeMode ? "crosshair" : "default" }}
       >
         <Background color="rgba(72,171,179,.25)" gap={24} size={1.5} />
-        <Controls
-          className="brainweb-flow-controls"
-          style={{
-            zIndex: 40,
-            display: "flex",
-            visibility: "visible",
-            opacity: 1,
-          }}
-        />
+        <Controls className="bw-flow-controls" />
+
+        {edges.map((edge) => {
+          if (!editingEdgeId || editingEdgeId !== edge.id) return null;
+
+          const source = nodes.find((n) => n.id === edge.source);
+          const target = nodes.find((n) => n.id === edge.target);
+          if (!source || !target) return null;
+
+          const [path, x, y] = getBezierPath({
+            sourceX: source.position.x,
+            sourceY: source.position.y,
+            targetX: target.position.x,
+            targetY: target.position.y,
+            sourcePosition: Position.Right,
+            targetPosition: Position.Left,
+          });
+
+          return (
+            <EdgeLabelRenderer key={`editor-${edge.id}`}>
+              <div
+                className="bw-edge-editor"
+                style={{
+                  transform: `translate(-50%, -50%) translate(${x}px,${y}px)`,
+                }}
+              >
+                <input
+                  autoFocus
+                  value={edge.label || ""}
+                  onChange={(e) => updateEdgeLabel(edge.id, e.target.value)}
+                  onBlur={leaveEditing}
+                />
+              </div>
+            </EdgeLabelRenderer>
+          );
+        })}
       </ReactFlow>
     </div>
   );

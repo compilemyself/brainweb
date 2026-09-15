@@ -1,280 +1,163 @@
 import React from "react";
 import { Handle, NodeResizer, Position } from "reactflow";
 
-const handleStyle = {
-  width: 20,
-  height: 20,
-  background: "white",
-  border: "3px solid #48abb3",
-  zIndex: 24,
-  touchAction: "none",
-};
-
-const resizeHandleStyle = {
-  width: 22,
-  height: 22,
-  borderRadius: 6,
-  border: "3px solid white",
-  background: "#48abb3",
-  touchAction: "none",
-};
-
-const resizeLineStyle = {
-  borderColor: "white",
-  borderWidth: 2,
-};
-
-const smallButtonStyle = {
-  border: "1px solid rgba(255,255,255,0.45)",
-  borderRadius: 6,
-  background: "rgba(255,255,255,0.14)",
-  color: "white",
-  cursor: "pointer",
-  minHeight: 34,
-  touchAction: "manipulation",
-};
-
-function generateItemId() {
-  if (window.crypto && typeof window.crypto.randomUUID === "function") {
-    return window.crypto.randomUUID();
-  }
-
-  return `item-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+function id() {
+return window.crypto?.randomUUID?.() || `item-${Date.now()}-${Math.random()}`;
 }
 
-function getChecklistItems(data) {
-  if (Array.isArray(data.items) && data.items.length > 0) {
-    return data.items;
-  }
-
-  return [
-    {
-      id: "legacy-item",
-      label: data.label || "Novo item",
-      checked: !!data.checked,
-    },
-  ];
+function items(data) {
+return Array.isArray(data.items) && data.items.length
+? data.items
+: [{
+id: "legacy",
+label: data.label || "Novo item",
+checked: !!data.checked
+}];
 }
 
-function getNodeSize(data) {
-  return {
-    width: Number(data.width) || 260,
-    height: Number(data.height) || 220,
-  };
+export default function ChecklistNode({ id: nodeId, data }) {
+const list = items(data);
+const editing = !!data.editing;
+const width = Number(data.width) || 260;
+const height = Number(data.height) || 220;
+
+const update = (next) => data.onChange?.(nodeId, { items: next });
+
+return (
+<div
+className="bw-node"
+style={{
+width,
+height,
+padding: editing ? 10 : 12,
+background: "var(--bw-accent, #48abb3)"
+}}
+>
+{editing && (
+<NodeResizer
+isVisible
+minWidth={150}
+minHeight={110}
+lineStyle={{
+borderColor: "rgba(255,255,255,.75)",
+borderWidth: 1
+}}
+handleStyle={{ opacity: 0 }}
+onResizeStart={() => data.onResizeStart?.()}
+onResize={(_, p) =>
+data.onResize?.(nodeId, {
+width: Math.round(p.width),
+height: Math.round(p.height)
+})
 }
+onResizeEnd={() => data.onResizeEnd?.()}
+/>
+)}
 
-export default function ChecklistNode({ id, data, selected }) {
-  const items = getChecklistItems(data);
-  const size = getNodeSize(data);
+```
+  <Handle type="target" position={Position.Left} className="bw-node-handle" />
 
-  const updateItems = (nextItems) => {
-    data.onChange(id, { items: nextItems });
-  };
+  {editing && (
+    <div className="node-drag-handle bw-node-dragbar">arrastar</div>
+  )}
 
-  const updateItem = (itemId, partialItem) => {
-    updateItems(
-      items.map((item) =>
-        item.id === itemId
-          ? {
-              ...item,
-              ...partialItem,
-            }
-          : item
-      )
-    );
-  };
-
-  const addItem = () => {
-    updateItems(
-      items.concat({
-        id: generateItemId(),
-        label: "Novo item",
-        checked: false,
-      })
-    );
-  };
-
-  const removeItem = (itemId) => {
-    if (items.length === 1) {
-      updateItems([{ ...items[0], label: "", checked: false }]);
-      return;
-    }
-
-    updateItems(items.filter((item) => item.id !== itemId));
-  };
-
-  return (
-    <div
-      style={{
-        position: "relative",
-        width: size.width,
-        height: size.height,
-        padding: 10,
-        boxSizing: "border-box",
-        borderRadius: 8,
-        background: "#48abb3",
-        color: "white",
-        border: data.isEdgeSource
-          ? "3px solid #baf7c2"
-          : data.isSelected
-            ? "2px solid white"
-            : "1px solid rgba(255,255,255,0.3)",
-        boxShadow: data.edgeMode
-          ? "0 0 0 4px rgba(186,247,194,0.18)"
-          : "none",
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-      }}
-    >
-      <NodeResizer
-        isVisible={selected || data.isSelected}
-        minWidth={150}
-        minHeight={110}
-        handleStyle={resizeHandleStyle}
-        lineStyle={resizeLineStyle}
-        onResizeStart={() => data.onResizeStart?.()}
-        onResize={(_, params) => {
-          data.onResize(id, {
-            width: Math.round(params.width),
-            height: Math.round(params.height),
-          });
-        }}
-        onResizeEnd={() => data.onResizeEnd?.()}
-      />
-
-      <Handle type="target" position={Position.Left} style={handleStyle} />
-
-      <div
-        className="node-drag-handle"
-        title="Arrastar nó"
+  <div
+    className="nowheel"
+    style={{
+      display: "flex",
+      flexDirection: "column",
+      gap: 8,
+      flex: 1,
+      minHeight: 0,
+      overflow: "auto"
+    }}
+  >
+    {list.map((item) => (
+      <label
+        key={item.id}
         style={{
-          minHeight: 30,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          borderRadius: 6,
-          background: "rgba(255,255,255,0.14)",
-          color: "rgba(255,255,255,0.85)",
-          fontSize: 12,
-          letterSpacing: "0.04em",
-          cursor: "grab",
-          userSelect: "none",
-          touchAction: "none",
-          flexShrink: 0,
-        }}
-      >
-        arrastar
-      </div>
-
-      <div
-        className="nowheel"
-        style={{
-          display: "flex",
-          flexDirection: "column",
+          display: "grid",
+          gridTemplateColumns: "auto 1fr auto",
           gap: 8,
-          flex: 1,
-          minHeight: 0,
-          overflow: "auto",
-          paddingRight: 2,
+          alignItems: "center"
         }}
       >
-        {items.map((item) => (
-          <label
-            key={item.id}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "auto 1fr auto",
-              gap: 8,
-              alignItems: "center",
-            }}
-          >
-            <input
-              className="nodrag"
-              type="checkbox"
-              checked={!!item.checked}
-              onChange={(event) => {
-                updateItem(item.id, { checked: event.target.checked });
-              }}
-              onBlur={() => data.onEditEnd?.()}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => event.stopPropagation()}
-              style={{ width: 19, height: 19 }}
-            />
-
-            <input
-              className="nodrag"
-              value={item.label || ""}
-              onChange={(event) => {
-                updateItem(item.id, { label: event.target.value });
-              }}
-              onBlur={() => data.onEditEnd?.()}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => event.stopPropagation()}
-              placeholder="Item da lista"
-              style={{
-                minWidth: 0,
-                minHeight: 32,
-                border: "none",
-                outline: "none",
-                background: "transparent",
-                color: "white",
-                fontSize: 16,
-              }}
-            />
-
-            <button
-              className="nodrag"
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                removeItem(item.id);
-              }}
-              onPointerDown={(event) => event.stopPropagation()}
-              title="Remover item"
-              style={{
-                ...smallButtonStyle,
-                width: 34,
-              }}
-            >
-              ×
-            </button>
-          </label>
-        ))}
-
-        <button
+        <input
           className="nodrag"
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            addItem();
-          }}
-          onPointerDown={(event) => event.stopPropagation()}
-          style={smallButtonStyle}
-        >
-          + item
-        </button>
-      </div>
-
-      <Handle type="source" position={Position.Right} style={handleStyle} />
-
-      {data.edgeMode && (
-        <div
-          className="nodrag"
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            inset: 0,
-            zIndex: 30,
-            borderRadius: 8,
-            background: data.isEdgeSource
-              ? "rgba(186,247,194,0.13)"
-              : "rgba(255,255,255,0.025)",
-            cursor: "crosshair",
-            touchAction: "manipulation",
-          }}
+          type="checkbox"
+          disabled={!editing}
+          checked={!!item.checked}
+          onChange={(e) =>
+            update(list.map((x) =>
+              x.id === item.id
+                ? { ...x, checked: e.target.checked }
+                : x
+            ))
+          }
         />
-      )}
-    </div>
+
+        {editing ? (
+          <input
+            className="nodrag"
+            value={item.label || ""}
+            onChange={(e) =>
+              update(list.map((x) =>
+                x.id === item.id
+                  ? { ...x, label: e.target.value }
+                  : x
+              ))
+            }
+            onBlur={() => data.onEditEnd?.()}
+            style={{
+              minWidth: 0,
+              minHeight: 30,
+              border: 0,
+              outline: 0,
+              background: "transparent",
+              color: "white",
+              fontSize: 16
+            }}
+          />
+        ) : (
+          <span>{item.label || "\u00a0"}</span>
+        )}
+
+        {editing && (
+          <button
+            className="nodrag"
+            type="button"
+            onClick={() =>
+              update(
+                list.length === 1
+                  ? [{ ...list[0], label: "", checked: false }]
+                  : list.filter((x) => x.id !== item.id)
+              )
+            }
+          >
+            ×
+          </button>
+        )}
+      </label>
+    ))}
+
+    {editing && (
+      <button
+        className="nodrag"
+        type="button"
+        onClick={() =>
+          update([
+            ...list,
+            { id: id(), label: "Novo item", checked: false }
+          ])
+        }
+      >
+        + item
+      </button>
+    )}
+  </div>
+
+  <Handle type="source" position={Position.Right} className="bw-node-handle" />
+</div>
+
   );
 }

@@ -1,13 +1,173 @@
+:root { --bw-accent: #48abb3; }
+
+html, body, #root { margin: 0; min-width: 100%; min-height: 100%; }
+
 body {
-  margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+button, input, textarea { font: inherit; }
+
+.bw-node {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: white;
+  border: 1px solid rgba(255,255,255,.28);
+  border-radius: 8px;
+  box-shadow: 0 5px 18px rgba(0,0,0,.16);
 }
+
+.bw-node-handle {
+  width: 10px !important;
+  height: 10px !important;
+  background: transparent !important;
+  border: 2px solid var(--bw-accent) !important;
+}
+
+.bw-node-dragbar {
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgba(255,255,255,.14);
+  color: rgba(255,255,255,.82);
+  font-size: 12px;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.bw-toolbar-button {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255,255,255,.42);
+  border-radius: 8px;
+  background: var(--bw-accent);
+  color: white;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.bw-logout { margin-left: auto; background: #8e3e45; }
+
+.bw-node-menu, .bw-map-settings {
+  display: grid;
+  gap: 6px;
+  padding: 7px;
+  border-radius: 9px;
+  background: rgba(15,47,51,.97);
+  border: 1px solid rgba(255,255,255,.35);
+  box-shadow: 0 10px 28px rgba(0,0,0,.3);
+}
+
+.bw-node-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 170px;
+}
+
+.bw-menu-button, .bw-settings-action {
+  min-height: 36px;
+  border: 1px solid rgba(255,255,255,.25);
+  border-radius: 6px;
+  background: rgba(255,255,255,.1);
+  color: white;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bw-map-settings {
+  position: absolute;
+  top: 62px;
+  left: 190px;
+  z-index: 40;
+  color: white;
+  min-width: 220px;
+}
+
+.bw-floating-note {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 35;
+}
+
+.bw-floating-note > button {
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255,255,255,.45);
+  border-radius: 9px;
+  background: var(--bw-accent);
+  color: white;
+  cursor: pointer;
+}
+
+.bw-floating-note.open textarea {
+  width: 260px;
+  height: 150px;
+  resize: both;
+  padding: 12px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  border: 1px solid rgba(255,255,255,.45);
+  background: rgba(15,47,51,.96);
+  color: white;
+  outline: none;
+}
+
+.bw-map-clock {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  z-index: 35;
+  color: white;
+  background: rgba(0,0,0,.36);
+  padding: 4px 7px;
+  border-radius: 5px;
+  font-size: 12px;
+  opacity: .78;
+  pointer-events: none;
+}
+
+.bw-image-drop {
+  position: absolute;
+  inset: 18px;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px dashed rgba(255,255,255,.8);
+  border-radius: 14px;
+  background: rgba(72,171,179,.2);
+  color: white;
+  font-size: 18px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.bw-edge-editor {
+  position: absolute;
+  z-index: 1000;
+  pointer-events: all;
+}
+
+.bw-edge-editor input {
+  min-width: 140px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255,255,255,.65);
+  border-radius: 6px;
+  background: rgba(15,47,51,.96);
+  color: white;
+  outline: none;
+}
+
+.bw-flow-controls { margin-bottom: 10px; }

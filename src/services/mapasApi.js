@@ -3,58 +3,30 @@ import { buildApiUrl, normalizeNetworkError } from "./apiConfig";
 const LOCAL_MAPA_ID = "local";
 const LOCAL_FLOW_KEY = "brainweb.flow.local";
 
-const MAPA_LOCAL = {
-  id: LOCAL_MAPA_ID,
-  id_usuario: 0,
-  titulo: "Mapa local",
-  criado_em: new Date().toISOString(),
-};
-
 function getToken() {
   return localStorage.getItem("bw_token") || sessionStorage.getItem("bw_token");
 }
 
-function getAuthHeaders(extraHeaders = {}) {
-  const token = getToken();
-
-  return {
-    ...extraHeaders,
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+function headers(extra = {}) {
+  const t = getToken();
+  return { ...extra, ...(t ? { Authorization: `Bearer ${t}` } : {}) };
 }
 
-function getLocalFlow() {
+function localFlow() {
   try {
-    const savedFlow = localStorage.getItem(LOCAL_FLOW_KEY);
-
-    if (!savedFlow) {
-      return { nodes: [], edges: [] };
-    }
-
-    const parsedFlow = JSON.parse(savedFlow);
+    const value = JSON.parse(localStorage.getItem(LOCAL_FLOW_KEY) || "{}");
 
     return {
-      nodes: Array.isArray(parsedFlow.nodes) ? parsedFlow.nodes : [],
-      edges: Array.isArray(parsedFlow.edges) ? parsedFlow.edges : [],
+      nodes: Array.isArray(value.nodes) ? value.nodes : [],
+      edges: Array.isArray(value.edges) ? value.edges : []
     };
-  } catch (error) {
-    console.error("Erro ao ler mapa local:", error);
+  } catch {
     return { nodes: [], edges: [] };
   }
 }
 
-function saveLocalFlow(data) {
-  try {
-    localStorage.setItem(
-      LOCAL_FLOW_KEY,
-      JSON.stringify({
-        nodes: Array.isArray(data?.nodes) ? data.nodes : [],
-        edges: Array.isArray(data?.edges) ? data.edges : [],
-      })
-    );
-  } catch (error) {
-    console.error("Erro ao salvar mapa local:", error);
-  }
+function saveLocal(data) {
+  try { localStorage.setItem(LOCAL_FLOW_KEY, JSON.stringify(data)); } catch {}
 }
 
 async function fetchJson(path, options = {}) {
@@ -62,19 +34,14 @@ async function fetchJson(path, options = {}) {
 
   try {
     res = await fetch(buildApiUrl(path), options);
-  } catch (error) {
-    throw normalizeNetworkError(error);
+  } catch (e) {
+    throw normalizeNetworkError(e);
   }
 
   if (!res.ok) {
     let message = `Erro HTTP ${res.status}`;
 
-    try {
-      const data = await res.json();
-      message = data.detail || message;
-    } catch {
-      // Mantém a mensagem padrão caso a resposta não seja JSON.
-    }
+    try { message = (await res.json()).detail || message; } catch {}
 
     throw new Error(message);
   }
@@ -84,58 +51,55 @@ async function fetchJson(path, options = {}) {
 
 export async function getMapaPrincipal() {
   try {
-    return await fetchJson("/mapas/principal", {
-      headers: getAuthHeaders(),
-    });
-  } catch (error) {
-    console.warn(
-      "Backend indisponível ou sessão inválida. Usando mapa local temporário.",
-      error
-    );
-
-    return MAPA_LOCAL;
+    return await fetchJson("/mapas/principal", { headers: headers() });
+  } catch {
+    return {
+      id: LOCAL_MAPA_ID,
+      id_usuario: 0,
+      titulo: "Mapa local",
+      criado_em: new Date().toISOString(),
+      nota_flutuante_ativa: true,
+      relogio_ativo: true,
+      nota_flutuante: ""
+    };
   }
 }
 
 export async function getFlowPrincipal() {
   try {
-    return await fetchJson("/mapas/principal/flow", {
-      headers: getAuthHeaders(),
-    });
-  } catch (error) {
-    console.warn(
-      "Backend indisponível ou sessão inválida. Carregando flow salvo localmente.",
-      error
-    );
-
-    return getLocalFlow();
+    return await fetchJson("/mapas/principal/flow", { headers: headers() });
+  } catch {
+    return localFlow();
   }
 }
 
-export async function salvarMapa(mapaId, data) {
-  if (mapaId === LOCAL_MAPA_ID) {
-    saveLocalFlow(data);
+export async function salvarMapa(id, data) {
+  if (id === LOCAL_MAPA_ID) {
+    saveLocal(data);
     return { status: "ok", storage: "local" };
   }
 
   try {
-    const resposta = await fetchJson(`/mapas/${mapaId}/flow`, {
+    const result = await fetchJson(`/mapas/${id}/flow`, {
       method: "PUT",
-      headers: getAuthHeaders({
-        "Content-Type": "application/json",
-      }),
-      body: JSON.stringify(data),
+      headers: headers({ "Content-Type": "application/json" }),
+      body: JSON.stringify(data)
     });
 
-    saveLocalFlow(data);
-    return resposta;
-  } catch (error) {
-    console.warn(
-      "Erro ao salvar no backend. Salvando cópia local temporária.",
-      error
-    );
-
-    saveLocalFlow(data);
+    saveLocal(data);
+    return result;
+  } catch {
+    saveLocal(data);
     return { status: "ok", storage: "local" };
   }
+}
+
+export async function salvarConfiguracaoMapa(id, data) {
+  if (id === LOCAL_MAPA_ID) return data;
+
+  return fetchJson(`/mapas/${id}/configuracao`, {
+    method: "PUT",
+    headers: headers({ "Content-Type": "application/json" }),
+    body: JSON.stringify(data)
+  });
 }

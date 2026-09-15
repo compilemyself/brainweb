@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { ReactFlowProvider } from "reactflow";
-
 import MapEditor from "../components/flow/MapEditor";
 import { getMapaPrincipal, getFlowPrincipal } from "../services/mapasApi";
 
@@ -15,7 +14,7 @@ export default function MapPage() {
       setMapa({
         ...mapaData,
         nodes: flowData.nodes || [],
-        edges: flowData.edges || [],
+        edges: flowData.edges || []
       });
     }
 
@@ -23,10 +22,5 @@ export default function MapPage() {
   }, []);
 
   if (!mapa) return <div>Carregando mapa...</div>;
-
-  return (
-    <ReactFlowProvider>
-      <MapEditor mapa={mapa} />
-    </ReactFlowProvider>
-  );
+  return <ReactFlowProvider><MapEditor mapa={mapa} /></ReactFlowProvider>;
 }

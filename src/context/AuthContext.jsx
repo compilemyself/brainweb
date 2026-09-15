@@ -1,4 +1,3 @@
-// src/context/AuthContext.jsx
 import React, { createContext, useEffect, useState } from "react";
 
 export const AuthContext = createContext();
@@ -8,24 +7,21 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
 
-  // Restaura a sessão antes de liberar a navegação, evitando que a landing page
-  // anônima apareça brevemente para uma conta que já estava conectada.
   useEffect(() => {
     try {
-      const savedUserRaw =
-        localStorage.getItem("bw_user") || sessionStorage.getItem("bw_user");
-      const savedToken =
-        localStorage.getItem("bw_token") || sessionStorage.getItem("bw_token");
-      const savedUser = savedUserRaw ? JSON.parse(savedUserRaw) : null;
+      const raw = localStorage.getItem("bw_user") || sessionStorage.getItem("bw_user");
+      const savedToken = localStorage.getItem("bw_token") || sessionStorage.getItem("bw_token");
 
-      if (savedUser && savedToken) {
-        setUser(savedUser);
+      if (raw && savedToken) {
+        const saved = JSON.parse(raw);
+        setUser(saved);
         setToken(savedToken);
+        document.documentElement.style.setProperty(
+          "--bw-accent", saved.cor_mapa || "#48abb3"
+        );
       }
-    } catch (error) {
-      console.error("Não foi possível restaurar a sessão:", error);
-      localStorage.removeItem("bw_user");
-      localStorage.removeItem("bw_token");
+    } catch {
+      localStorage.clear();
       sessionStorage.removeItem("bw_user");
       sessionStorage.removeItem("bw_token");
     } finally {
@@ -34,17 +30,33 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = (data, keepLogged) => {
-    setUser(data.usuario);
+    const nextUser = data.usuario;
+    setUser(nextUser);
     setToken(data.access_token);
+    document.documentElement.style.setProperty(
+      "--bw-accent", nextUser.cor_mapa || "#48abb3"
+    );
 
     const storage = keepLogged ? localStorage : sessionStorage;
-    const otherStorage = keepLogged ? sessionStorage : localStorage;
+    const other = keepLogged ? sessionStorage : localStorage;
 
-    otherStorage.removeItem("bw_user");
-    otherStorage.removeItem("bw_token");
-    storage.setItem("bw_user", JSON.stringify(data.usuario));
+    other.removeItem("bw_user");
+    other.removeItem("bw_token");
+    storage.setItem("bw_user", JSON.stringify(nextUser));
     storage.setItem("bw_token", data.access_token);
   };
+
+  const updateUser = (partial) => setUser((current) => {
+    const next = { ...current, ...partial };
+    const storage = localStorage.getItem("bw_token") ? localStorage : sessionStorage;
+
+    storage.setItem("bw_user", JSON.stringify(next));
+    document.documentElement.style.setProperty(
+      "--bw-accent", next.cor_mapa || "#48abb3"
+    );
+
+    return next;
+  });
 
   const logout = () => {
     setUser(null);
@@ -56,9 +68,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider
-      value={{ user, token, isAuthReady, login, logout }}
-    >
+    <AuthContext.Provider value={{ user, token, isAuthReady, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

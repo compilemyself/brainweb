@@ -7,11 +7,13 @@ function AppContent() {
   const { user, isAuthReady } = useContext(AuthContext);
   const [mapOpen, setMapOpen] = useState(false);
 
+  useEffect(() => { if (!user) setMapOpen(false); }, [user]);
+
   useEffect(() => {
-    if (!user) {
-      setMapOpen(false);
-    }
-  }, [user]);
+    document.documentElement.style.setProperty(
+      "--bw-accent", user?.cor_mapa || "#48abb3"
+    );
+  }, [user?.cor_mapa]);
 
   if (!isAuthReady) {
     return (
@@ -21,9 +23,8 @@ function AppContent() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#48abb3",
-          color: "white",
-          fontFamily: "'Courier New', monospace",
+          background: "var(--bw-accent)",
+          color: "white"
         }}
       >
         carregando sessão...
@@ -31,17 +32,10 @@ function AppContent() {
     );
   }
 
-  if (user && mapOpen) {
-    return <MapPage />;
-  }
-
+  if (user && mapOpen) return <MapPage />;
   return <LoginPage onOpenMap={() => setMapOpen(true)} />;
 }
 
 export default function App() {
-  return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
-  );
+  return <AuthProvider><AppContent /></AuthProvider>;
 }

@@ -1,11 +1,9 @@
 from pydantic import BaseModel
 from typing import List, Dict, Any
 
-
 class PositionSchema(BaseModel):
     x: float
     y: float
-
 
 class FlowNodeSchema(BaseModel):
     id: str
@@ -13,12 +11,11 @@ class FlowNodeSchema(BaseModel):
     position: PositionSchema
     data: Dict[str, Any]
 
-
 class FlowEdgeSchema(BaseModel):
     id: str
     source: str
     target: str
-
+    label: str = ""
 
 class FlowSchema(BaseModel):
     nodes: List[FlowNodeSchema]

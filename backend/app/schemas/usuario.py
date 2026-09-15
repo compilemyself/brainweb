@@ -1,28 +1,27 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
 
 class UsuarioCreate(BaseModel):
-    """Dados recebidos no cadastro — espelha o RegisterForm do front-end."""
     nome: str
     email: EmailStr
     senha: str
 
 class UsuarioLogin(BaseModel):
-    """Dados recebidos no login — espelha o LoginForm do front-end."""
     email: EmailStr
     senha: str
 
 class UsuarioSchema(BaseModel):
-    """Dados retornados após cadastro — nunca expõe senha_hash."""
     id: int
     nome: str
     email: str
+    cor_mapa: str = "#48abb3"
     criado_em: datetime
-
     model_config = {"from_attributes": True}
 
+class UsuarioPreferenciasSchema(BaseModel):
+    cor_mapa: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
+
 class TokenSchema(BaseModel):
-    """Token JWT retornado após login bem-sucedido."""
     access_token: str
     token_type: str = "bearer"
     usuario: UsuarioSchema
