@@ -46,7 +46,7 @@ export default function MapEditor({mapa,config:initialConfig}){
  const finishTransaction=useCallback(()=>{if(transaction.current){pushHistory(transaction.current);transaction.current=null}},[pushHistory]);
  const undo=useCallback(()=>{finishTransaction();commitHistory();const p=past.current.pop();if(!p)return;future.current.push(capture());setNodes(p.nodes);setEdges(p.edges)},[capture,commitHistory,finishTransaction,setEdges,setNodes]);
  const redo=useCallback(()=>{commitHistory();const n=future.current.pop();if(!n)return;past.current.push(capture());setNodes(n.nodes);setEdges(n.edges)},[capture,commitHistory,setEdges,setNodes]);
- const center=useCallback(()=>rf.screenToFlowPosition({x:innerWidth/2,y:innerHeight/2}),[rf]);
+ const center=useCallback(()=>rf.screenToFlowPosition({x:window.innerWidth/2,y:window.innerHeight/2}),[rf]);
  const updateNodeData=useCallback((id,partial)=>{beginHistory();setNodes(ns=>ns.map(n=>n.id===id?{...n,data:{...n.data,...partial}}:n))},[beginHistory,setNodes]);
  const resizeNode=useCallback((id,partial)=>setNodes(ns=>ns.map(n=>n.id===id?{...n,data:{...n.data,...partial}}:n)),[setNodes]);
  const enterEdit=useCallback(id=>{setFocusedNodeId(id);setEditingNodeId(id);setEditingEdgeId(null);setContext(null)},[]);
