@@ -4,7 +4,11 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from app.core.config import settings
 
 engine = create_engine(
-    settings.DATABASE_URL,
+    settings.DATABASE_URL.replace(
+        "postgresql://",
+        "postgresql+psycopg2://",
+        1,
+    ),
     pool_pre_ping=True,
 )
 
