@@ -23,7 +23,7 @@ function imageDimensions(src){return new Promise(resolve=>{const i=new Image();i
 
 export default function MapEditor({mapa,config:initialConfig}){
  const {user,logout,updateUser}=useContext(AuthContext);const rf=useReactFlow();
- const imageInput=useRef(null),replaceImageNode=useRef(null),saveTimer=useRef(null),saveQueue=useRef(Promise.resolve());
+ const imageInput=useRef(null),replaceImageNode=useRef(null),saveTimer=useRef(null),saveQueueRef=useRef(Promise.resolve());
  const past=useRef([]),future=useRef([]),pending=useRef(null),historyTimer=useRef(null),transaction=useRef(null),leaving=useRef(false);
  const [config,setConfig]=useState(initialConfig||{});const theme=useMemo(()=>resolveTheme(config),[config]);
  const initialNodes=useMemo(()=>mapa.nodes.map(n=>({id:String(n.id),type:n.type||"TEXT",position:n.position||{x:100,y:100},data:{...initialData(n.type||"TEXT"),...(n.data||{}),imageDeformable:!!config.imagem_deformavel}})),[mapa.nodes,config.imagem_deformavel]);
@@ -66,7 +66,11 @@ export default function MapEditor({mapa,config:initialConfig}){
  const deleteSelected=useCallback(()=>{const ids=new Set(nodesRef.current.filter(n=>n.selected).map(n=>n.id));const eids=new Set(edgesRef.current.filter(e=>e.selected).map(e=>e.id));if(!ids.size&&!eids.size)return;pushHistory(capture(),false);setNodes(ns=>ns.filter(n=>!ids.has(n.id)));setEdges(es=>es.filter(e=>!eids.has(e.id)&&!ids.has(e.source)&&!ids.has(e.target)) )},[capture,pushHistory,setEdges,setNodes]);
  const results=useMemo(()=>{const q=search.trim().toLowerCase();if(!q)return[];return nodes.filter(n=>n.type==="TEXT"||n.type==="CHECKLIST").filter(n=>{const t=n.type==="TEXT"?n.data?.label||"":(n.data?.items||[]).map(i=>i.label).join(" ");return t.toLowerCase().includes(q)}).map(n=>n.id)},[nodes,search]);
  useEffect(()=>{if(!results.length)return;setSearchIndex(i=>Math.min(i,results.length-1));const id=results[searchIndex]||results[0];const n=nodes.find(x=>x.id===id);if(n)rf.setCenter(n.position.x+(Number(n.data?.width)||240)/2,n.position.y+(Number(n.data?.height)||170)/2,{zoom:rf.getViewport().zoom,duration:250})},[results,searchIndex,rf,nodes]);
- const saveQueue=useCallback(data=>{const next=saveQueue.current.catch(()=>{}).then(()=>salvarMapa(mapa.id,data));saveQueue.current=next;return next},[mapa.id]);
+ const saveQueue=useCallback(data=>{
+  const next=saveQueueRef.current.catch(()=>{}).then(()=>salvarMapa(mapa.id,data));
+  saveQueueRef.current=next;
+  return next
+},[mapa.id]);
  const handleWheel=useCallback(e=>{if(e.target.closest?.("textarea,input,button,select"))return;e.preventDefault();const v=rf.getViewport();const rect=e.currentTarget.getBoundingClientRect();if(e.ctrlKey){const factor=e.deltaY<0?1.08:.92;const z=Math.min(4,Math.max(.2,v.zoom*factor));const px=e.clientX-rect.left,py=e.clientY-rect.top;rf.setViewport({x:px-(px-v.x)*(z/v.zoom),y:py-(py-v.y)*(z/v.zoom),zoom:z});return}if(e.shiftKey){rf.setViewport({...v,x:v.x-e.deltaY});return}rf.setViewport({...v,y:v.y-e.deltaY})},[rf]);
  const saveSettings=useCallback(async(patch)=>{const c=await atualizarPreferenciasUsuario(patch);setConfig(c.configuracao||c);updateUser({configuracao:c.configuracao||c});return c},[updateUser]);
  const saveNote=useCallback(async(v)=>{setNote(v);await salvarConfiguracaoMapa(mapa.id,{nota_flutuante:v})},[mapa.id]);
