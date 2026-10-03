@@ -9,9 +9,7 @@ from app.schemas.flow import FlowSchema
 from app.services.flow_servico import FlowServico
 
 router = APIRouter(prefix="/mapas", tags=["Flow"])
-
 def get_servico(db: Session = Depends(get_db)): return FlowServico(FlowRepo(db))
-
 def owner(mapa_id, usuario, db):
     mapa = MapaRepo(db).buscar_por_id(mapa_id)
     if not mapa: raise HTTPException(status_code=404, detail="Mapa não encontrado")
@@ -20,7 +18,6 @@ def owner(mapa_id, usuario, db):
 
 @router.get("/principal/flow", response_model=FlowSchema)
 def flow_principal(usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db), servico: FlowServico = Depends(get_servico)):
-    from app.repositories.mapa_repo import MapaRepo
     mapa = MapaRepo(db).procurar_por_usuario(usuario.id)
     if not mapa: raise HTTPException(status_code=404, detail="Mapa não encontrado")
     return servico.carregar_flow(mapa.id)

@@ -15,6 +15,8 @@ class FlowEdgeSchema(BaseModel):
     id: str
     source: str
     target: str
+    sourceHandle: str = "right-source"
+    targetHandle: str = "left-target"
     label: str = ""
 
 class FlowSchema(BaseModel):

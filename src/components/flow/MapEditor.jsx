@@ -1,900 +1,103 @@
-import React, {
-  useCallback, useContext, useEffect, useMemo, useRef, useState,
-} from "react";
-import ReactFlow, {
-  addEdge, applyEdgeChanges, applyNodeChanges,
-  Background, Controls, EdgeLabelRenderer, getBezierPath,
-  Position, useReactFlow,
-} from "reactflow";
+import React,{useCallback,useEffect,useMemo,useRef,useState} from "react";
+import ReactFlow,{addEdge,applyEdgeChanges,applyNodeChanges,Background,Controls,EdgeLabelRenderer,getBezierPath,Position,useReactFlow} from "reactflow";
 import "reactflow/dist/style.css";
-
-import { AuthContext } from "../../context/AuthContext";
-import { nodeTypes } from "./nodeTypes";
-import { salvarMapa, salvarConfiguracaoMapa } from "../../services/mapasApi";
-import { atualizarPreferenciasUsuario } from "../../services/usuarioApi";
-
-const EDGE_STYLE = { stroke: "rgba(255,255,255,0.72)", strokeWidth: 2 };
-const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
-const HISTORY_LIMIT = 80;
-const DATA_HISTORY_DELAY = 650;
-const COLORS = [
-  "#48abb3", "#47b393", "#47b36d", "#74b347", "#b3af47", "#b37d47",
-  "#b34747", "#b3479a", "#8d47b3", "#5d47b3", "#4768b3",
-];
-
-function generateId(prefix) {
-  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function getInitialDataByType(type) {
-  if (type === "CHECKLIST") {
-    return {
-      width: 260, height: 220,
-      items: [{ id: generateId("item"), label: "Novo item", checked: false }],
-    };
-  }
-  if (type === "IMAGE") return { width: 240, height: 190, label: "Imagem", src: "" };
-  return { width: 240, height: 170, label: "Novo texto" };
-}
-
-function isTextEditingElement(element) {
-  const tag = element?.tagName?.toLowerCase();
-  return tag === "input" || tag === "textarea" || !!element?.isContentEditable;
-}
-
-function removeRuntimeData(data = {}) {
-  return Object.fromEntries(Object.entries(data).filter(([key]) => ![
-    "onChange", "onEditEnd", "onResize", "onResizeStart", "onResizeEnd",
-    "edgeMode", "isEdgeSource", "isSelected", "editing", "accentColor",
-  ].includes(key)));
-}
-
-function buildFlowPayload(nodes, edges) {
-  return {
-    nodes: nodes.map((node) => ({
-      id: node.id,
-      type: node.type || "TEXT",
-      position: node.position,
-      data: removeRuntimeData(node.data),
-    })),
-    edges: edges.map((edge) => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      label: edge.label || "",
-    })),
-  };
-}
-
-function snapshot(nodes, edges) {
-  const payload = buildFlowPayload(nodes, edges);
-
-  return {
-    nodes: payload.nodes.map((node) => ({
-      ...node,
-      position: { ...node.position },
-      data: JSON.parse(JSON.stringify(node.data || {})),
-    })),
-    edges: payload.edges.map((edge) => ({ ...edge, style: EDGE_STYLE })),
-  };
-}
-
-function serialize(value) {
-  return JSON.stringify(buildFlowPayload(value.nodes, value.edges));
-}
-
-function readImageFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
-function getClockText() {
-  return new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    dateStyle: "short",
-    timeStyle: "medium",
-  }).format(new Date());
-}
-
-export default function MapEditor({ mapa }) {
-  const { user, logout, updateUser } = useContext(AuthContext);
-  const reactFlow = useReactFlow();
-  const imageInputRef = useRef(null);
-  const saveTimeoutRef = useRef(null);
-  const saveQueueRef = useRef(Promise.resolve());
-  const leavingRef = useRef(false);
-  const pastRef = useRef([]);
-  const futureRef = useRef([]);
-  const pendingHistoryRef = useRef(null);
-  const historyTimeoutRef = useRef(null);
-  const transactionRef = useRef(null);
-
-  const initialNodes = useMemo(() => (mapa.nodes || []).map((node) => ({
-    id: String(node.id),
-    type: node.type || "TEXT",
-    position: node.position || { x: 100, y: 100 },
-    data: { ...getInitialDataByType(node.type || "TEXT"), ...(node.data || {}) },
-  })), [mapa.nodes]);
-
-  const initialEdges = useMemo(() => (mapa.edges || []).map((edge) => ({
-    id: String(edge.id),
-    source: String(edge.source),
-    target: String(edge.target),
-    label: edge.label || "",
-    style: EDGE_STYLE,
-  })), [mapa.edges]);
-
-  const [nodes, setNodesState] = useState(initialNodes);
-  const [edges, setEdgesState] = useState(initialEdges);
-  const nodesRef = useRef(initialNodes);
-  const edgesRef = useRef(initialEdges);
-  const [editingNodeId, setEditingNodeId] = useState(null);
-  const [focusedNodeId, setFocusedNodeId] = useState(null);
-  const [editingEdgeId, setEditingEdgeId] = useState(null);
-  const copiedNodeRef = useRef(null);
-  const [nodeMenuOpen, setNodeMenuOpen] = useState(false);
-  const [edgeMode, setEdgeMode] = useState(false);
-  const [connectionSourceId, setConnectionSourceId] = useState(null);
-  const [isImageDragActive, setIsImageDragActive] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [clock, setClock] = useState(getClockText());
-  const [noteOpen, setNoteOpen] = useState(!!mapa.nota_flutuante);
-  const [note, setNote] = useState(mapa.nota_flutuante || "");
-  const [calendarEnabled, setCalendarEnabled] = useState(mapa.relogio_ativo !== false);
-  const [noteEnabled, setNoteEnabled] = useState(mapa.nota_flutuante_ativa !== false);
-  const [accentColor, setAccentColor] = useState(user?.cor_mapa || "#48abb3");
-
-  const setNodes = useCallback((updater) => setNodesState((current) => {
-    const next = typeof updater === "function" ? updater(current) : updater;
-    nodesRef.current = next;
-    return next;
-  }), []);
-
-  const setEdges = useCallback((updater) => setEdgesState((current) => {
-    const next = typeof updater === "function" ? updater(current) : updater;
-    edgesRef.current = next;
-    return next;
-  }), []);
-
-  useEffect(() => {
-    document.documentElement.style.setProperty("--bw-accent", accentColor);
-  }, [accentColor]);
-
-  useEffect(() => {
-    const id = setInterval(() => setClock(getClockText()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    if (user?.cor_mapa) setAccentColor(user.cor_mapa);
-  }, [user?.cor_mapa]);
-
-  const capture = useCallback(() => snapshot(nodesRef.current, edgesRef.current), []);
-
-  const pushHistory = useCallback((item, compare = true) => {
-    if (compare && serialize(item) === serialize(capture())) return;
-
-    const past = pastRef.current;
-    if (!past.length || serialize(past[past.length - 1]) !== serialize(item)) past.push(item);
-    if (past.length > HISTORY_LIMIT) past.splice(0, past.length - HISTORY_LIMIT);
-    futureRef.current = [];
-  }, [capture]);
-
-  const commitHistory = useCallback(() => {
-    if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
-    historyTimeoutRef.current = null;
-
-    if (pendingHistoryRef.current) {
-      pushHistory(pendingHistoryRef.current);
-      pendingHistoryRef.current = null;
-    }
-  }, [pushHistory]);
-
-  const beginDataHistory = useCallback(() => {
-    if (!pendingHistoryRef.current && !transactionRef.current) {
-      pendingHistoryRef.current = capture();
-    }
-
-    if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
-    historyTimeoutRef.current = setTimeout(commitHistory, DATA_HISTORY_DELAY);
-  }, [capture, commitHistory]);
-
-  const beginTransaction = useCallback(() => {
-    commitHistory();
-    if (!transactionRef.current) transactionRef.current = capture();
-  }, [capture, commitHistory]);
-
-  const finishTransaction = useCallback(() => {
-    if (transactionRef.current) {
-      pushHistory(transactionRef.current);
-      transactionRef.current = null;
-    }
-  }, [pushHistory]);
-
-  const undo = useCallback(() => {
-    finishTransaction();
-    commitHistory();
-
-    const previous = pastRef.current.pop();
-    if (!previous) return;
-
-    futureRef.current.push(capture());
-    setNodes(previous.nodes);
-    setEdges(previous.edges);
-    setEditingNodeId(null);
-    setEditingEdgeId(null);
-  }, [capture, commitHistory, finishTransaction, setEdges, setNodes]);
-
-  const redo = useCallback(() => {
-    commitHistory();
-
-    const next = futureRef.current.pop();
-    if (!next) return;
-
-    pastRef.current.push(capture());
-    setNodes(next.nodes);
-    setEdges(next.edges);
-    setEditingNodeId(null);
-    setEditingEdgeId(null);
-  }, [capture, commitHistory, setEdges, setNodes]);
-
-  const screenToFlowPosition = useCallback((point) => {
-    if (reactFlow.screenToFlowPosition) return reactFlow.screenToFlowPosition(point);
-    return reactFlow.project(point);
-  }, [reactFlow]);
-
-  const center = useCallback(
-    () => screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }),
-    [screenToFlowPosition]
-  );
-
-  const updateNodeData = useCallback((id, partial) => {
-    beginDataHistory();
-    setNodes((items) => items.map((node) => node.id === id
-      ? { ...node, data: { ...node.data, ...partial } }
-      : node
-    ));
-  }, [beginDataHistory, setNodes]);
-
-  const resizeNodeData = useCallback((id, partial) => setNodes((items) => items.map(
-    (node) => node.id === id
-      ? { ...node, data: { ...node.data, ...partial } }
-      : node
-  )), [setNodes]);
-
-  const enterNodeEdit = useCallback((id) => {
-    setFocusedNodeId(id);
-    setEditingNodeId(id);
-    setEditingEdgeId(null);
-    setNodeMenuOpen(false);
-  }, []);
-
-  const leaveEditing = useCallback(() => {
-    commitHistory();
-    setEditingNodeId(null);
-    setEditingEdgeId(null);
-  }, [commitHistory]);
-
-  const createNode = useCallback((type, position, data = {}) => {
-    pushHistory(capture(), false);
-
-    const node = {
-      id: generateId("node"),
-      type,
-      position,
-      data: { ...getInitialDataByType(type), ...data },
-    };
-
-    setNodes((items) => [...items, node]);
-    setFocusedNodeId(node.id);
-    setEditingNodeId(node.id);
-    setEditingEdgeId(null);
-    setNodeMenuOpen(false);
-  }, [capture, pushHistory, setNodes]);
-
-  const addNode = useCallback((type, data = {}) => {
-    const p = center();
-    const offset = (nodesRef.current.length % 6) * 24;
-    createNode(type, { x: p.x + offset, y: p.y + offset }, data);
-  }, [center, createNode]);
-
-  const createImageNodeFromFile = useCallback(async (file, position) => {
-    if (!file?.type?.startsWith("image/")) {
-      return alert("Escolha um arquivo de imagem válido.");
-    }
-
-    if (file.size > IMAGE_MAX_BYTES) {
-      return alert("Imagem muito grande. Escolha um arquivo com até 4 MB.");
-    }
-
-    try {
-      const src = await readImageFileAsDataUrl(file);
-      createNode(
-        "IMAGE",
-        position || center(),
-        { label: file.name, src, mimeType: file.type, size: file.size }
-      );
-    } catch (error) {
-      console.error(error);
-      alert("Não foi possível carregar a imagem selecionada.");
-    }
-  }, [center, createNode]);
-
-  const handleImageSelected = useCallback(async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (file) await createImageNodeFromFile(file);
-  }, [createImageNodeFromFile]);
-
-  const createTextFromClipboard = useCallback(async () => {
-    try {
-      const items = await navigator.clipboard.read?.();
-
-      if (items) {
-        for (const item of items) {
-          const imageType = item.types.find((type) => type.startsWith("image/"));
-
-          if (imageType) {
-            const blob = await item.getType(imageType);
-            const file = new File([blob], "imagem-colada", { type: imageType });
-            await createImageNodeFromFile(file);
-            return true;
-          }
-        }
-      }
-
-      const text = await navigator.clipboard.readText();
-      if (text) {
-        createNode("TEXT", center(), { label: text });
-        return true;
-      }
-    } catch (error) {
-      console.warn("Clipboard indisponível:", error);
-    }
-
-    return false;
-  }, [center, createImageNodeFromFile, createNode]);
-
-  const deleteNode = useCallback((id) => {
-    pushHistory(capture(), false);
-    setNodes((items) => items.filter((n) => n.id !== id));
-    setEdges((items) => items.filter((e) => e.source !== id && e.target !== id));
-    setEditingNodeId(null);
-    setFocusedNodeId(null);
-  }, [capture, pushHistory, setEdges, setNodes]);
-
-  const deleteEdge = useCallback((id) => {
-    pushHistory(capture(), false);
-    setEdges((items) => items.filter((e) => e.id !== id));
-    setEditingEdgeId(null);
-  }, [capture, pushHistory, setEdges]);
-
-  const createEdgeBetweenNodes = useCallback((source, target) => {
-    if (!source || !target || source === target) return;
-
-    if (edgesRef.current.some((e) =>
-      (e.source === source && e.target === target) ||
-      (e.source === target && e.target === source)
-    )) return;
-
-    pushHistory(capture(), false);
-    setEdges((items) => addEdge({
-      id: generateId("edge"),
-      source,
-      target,
-      style: EDGE_STYLE,
-      label: "",
-    }, items));
-  }, [capture, pushHistory, setEdges]);
-
-  const onConnect = useCallback(
-    (connection) => createEdgeBetweenNodes(connection.source, connection.target),
-    [createEdgeBetweenNodes]
-  );
-
-  const onNodeClick = useCallback((event, node) => {
-    if (edgeMode) {
-      event.stopPropagation();
-
-      if (!connectionSourceId) {
-        setConnectionSourceId(node.id);
-      } else {
-        createEdgeBetweenNodes(connectionSourceId, node.id);
-        setConnectionSourceId(null);
-        setEdgeMode(false);
-      }
-
-      return;
-    }
-
-    setFocusedNodeId(node.id);
-    if (editingNodeId === node.id) return;
-    setEditingEdgeId(null);
-  }, [connectionSourceId, createEdgeBetweenNodes, edgeMode, editingNodeId]);
-
-  const onNodeDoubleClick = useCallback((event, node) => {
-    event.stopPropagation();
-    enterNodeEdit(node.id);
-  }, [enterNodeEdit]);
-
-  const onPaneClick = useCallback(() => {
-    setFocusedNodeId(null);
-    setNodeMenuOpen(false);
-    setConnectionSourceId(null);
-    setEdgeMode(false);
-    leaveEditing();
-  }, [leaveEditing]);
-
-  const onCanvasDoubleClick = useCallback((event) => {
-  if (
-    event.target.closest?.(".react-flow__node") ||
-    event.target.closest?.(".react-flow__edge") ||
-    event.target.closest?.(".react-flow__controls") ||
-    event.target.closest?.(".bw-toolbar-button") ||
-    event.target.closest?.(".bw-map-settings") ||
-    event.target.closest?.(".bw-floating-note")
-  ) {
-    return;
-  }
-
-  event.preventDefault();
-  reactFlow.fitView({ duration: 200 });
-}, [reactFlow]);
-
-  const onEdgeClick = useCallback((event, edge) => {
-    event.stopPropagation();
-    setEditingNodeId(null);
-    setEditingEdgeId(null);
-  }, []);
-
-  const onEdgeDoubleClick = useCallback((event, edge) => {
-    event.stopPropagation();
-    setEditingNodeId(null);
-    setEditingEdgeId(edge.id);
-  }, []);
-
-  const onNodesChange = useCallback((changes) => {
-    setNodes((items) => applyNodeChanges(changes, items));
-  }, [setNodes]);
-
-  const onEdgesChange = useCallback((changes) => {
-    if (changes.some((c) => c.type === "remove")) pushHistory(capture(), false);
-    setEdges((items) => applyEdgeChanges(changes, items));
-  }, [capture, pushHistory, setEdges]);
-
-  const updateEdgeLabel = useCallback((id, label) => {
-    beginDataHistory();
-    setEdges((items) => items.map((edge) =>
-      edge.id === id ? { ...edge, label } : edge
-    ));
-  }, [beginDataHistory, setEdges]);
-
-  const nodesWithHandlers = useMemo(() => nodes.map((node) => ({
-    ...node,
-    selected: false,
-    draggable: true,
-    data: {
-      ...node.data,
-      accentColor,
-      editing: editingNodeId === node.id,
-      edgeMode,
-      isEdgeSource: node.id === connectionSourceId,
-      onChange: updateNodeData,
-      onEditEnd: leaveEditing,
-      onResize: resizeNodeData,
-      onResizeStart: beginTransaction,
-      onResizeEnd: finishTransaction,
-    },
-  })), [
-    accentColor, beginTransaction, connectionSourceId, edgeMode,
-    editingNodeId, finishTransaction, leaveEditing, nodes,
-    resizeNodeData, updateNodeData,
-  ]);
-
-  const queueSave = useCallback((payload) => {
-    const next = saveQueueRef.current
-      .catch(() => undefined)
-      .then(() => salvarMapa(mapa.id, payload));
-
-    saveQueueRef.current = next;
-    return next;
-  }, [mapa.id]);
-
-  const saveCurrent = useCallback(
-    () => queueSave(buildFlowPayload(nodesRef.current, edgesRef.current)),
-    [queueSave]
-  );
-
-  const saveMapSettings = useCallback(async (next) => {
-    const data = await salvarConfiguracaoMapa(mapa.id, next);
-
-    setNoteEnabled(data.nota_flutuante_ativa !== false);
-    setCalendarEnabled(data.relogio_ativo !== false);
-    setNote(data.nota_flutuante || "");
-  }, [mapa.id]);
-
-  const cycleColor = useCallback(async () => {
-    const index = COLORS.indexOf((accentColor || "#48abb3").toLowerCase());
-    const nextColor = COLORS[(index + 1) % COLORS.length];
-
-    setAccentColor(nextColor);
-    updateUser({ cor_mapa: nextColor });
-
-    try {
-      await atualizarPreferenciasUsuario({ cor_mapa: nextColor });
-    } catch (error) {
-      console.error("Erro ao salvar cor do mapa:", error);
-    }
-  }, [accentColor, updateUser]);
-
-  const handleLogout = useCallback(async () => {
-    leavingRef.current = true;
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    commitHistory();
-
-    await saveQueueRef.current.catch(() => undefined);
-    await saveCurrent().catch(() => undefined);
-    logout();
-  }, [commitHistory, logout, saveCurrent]);
-
-  useEffect(() => {
-    const handler = async (event) => {
-      const modifier = event.ctrlKey || event.metaKey;
-      const key = event.key.toLowerCase();
-
-      if (modifier && !event.altKey) {
-        if (key === "z" && !event.shiftKey && !isTextEditingElement(event.target)) {
-          event.preventDefault();
-          undo();
-          return;
-        }
-
-        if (
-          (key === "y" || (key === "z" && event.shiftKey)) &&
-          !isTextEditingElement(event.target)
-        ) {
-          event.preventDefault();
-          redo();
-          return;
-        }
-
-        if (key === "c" && !isTextEditingElement(event.target)) {
-          const node = nodesRef.current.find((n) => n.id === focusedNodeId);
-
-          if (node) {
-            event.preventDefault();
-            copiedNodeRef.current = JSON.parse(
-              JSON.stringify({ ...node, data: removeRuntimeData(node.data) })
-            );
-          }
-
-          return;
-        }
-
-        if (key === "v" && !isTextEditingElement(event.target)) {
-          event.preventDefault();
-
-          if (copiedNodeRef.current) {
-            const original = copiedNodeRef.current;
-            const clone = {
-              ...original,
-              id: generateId("node"),
-              position: {
-                x: original.position.x + 36,
-                y: original.position.y + 36,
-              },
-              data: JSON.parse(JSON.stringify(original.data || {})),
-            };
-
-            pushHistory(capture(), false);
-            setNodes((items) => [...items, clone]);
-            setFocusedNodeId(clone.id);
-            setEditingNodeId(clone.id);
-          } else {
-            await createTextFromClipboard();
-          }
-
-          return;
-        }
-      }
-
-      if (
-        (event.key === "Delete" || event.key === "Backspace") &&
-        !isTextEditingElement(event.target)
-      ) {
-        event.preventDefault();
-        if (editingNodeId) deleteNode(editingNodeId);
-        else if (editingEdgeId) deleteEdge(editingEdgeId);
-      }
-
-      if (event.key === "Escape") {
-        setEdgeMode(false);
-        setConnectionSourceId(null);
-        leaveEditing();
-      }
-    };
-
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [
-    createTextFromClipboard, deleteEdge, deleteNode, editingEdgeId,
-    editingNodeId, focusedNodeId, leaveEditing, pushHistory,
-    redo, setNodes, undo, capture,
-  ]);
-
-  useEffect(() => {
-    if (!mapa?.id || leavingRef.current) return;
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-
-    saveTimeoutRef.current = setTimeout(
-      () => queueSave(buildFlowPayload(nodes, edges)).catch(console.error),
-      2500
-    );
-
-    return () => clearTimeout(saveTimeoutRef.current);
-  }, [edges, mapa?.id, nodes, queueSave]);
-
-  useEffect(() => () => {
-    if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-  }, []);
-
-  const handleWheel = useCallback((event) => {
-    if (event.target.closest?.("textarea,input,button")) return;
-    event.preventDefault();
-
-    const viewport = reactFlow.getViewport();
-    const rect = event.currentTarget.getBoundingClientRect();
-
-    if (event.ctrlKey) {
-      const factor = event.deltaY < 0 ? 1.08 : 0.92;
-      const nextZoom = Math.min(4, Math.max(0.2, viewport.zoom * factor));
-      const px = event.clientX - rect.left;
-      const py = event.clientY - rect.top;
-
-      reactFlow.setViewport({
-        x: px - (px - viewport.x) * (nextZoom / viewport.zoom),
-        y: py - (py - viewport.y) * (nextZoom / viewport.zoom),
-        zoom: nextZoom,
-      });
-      return;
-    }
-
-    reactFlow.setViewport({ ...viewport, y: viewport.y - event.deltaY });
-  }, [reactFlow]);
-
-  return (
-    <div
-      style={{
-        width: "100vw",
-        height: "100vh",
-        background: "#0f2f33",
-        position: "relative",
-        overflow: "hidden",
-      }}
-      onWheel={handleWheel}
-      onDragOver={(e) => {
-        if ([...(e.dataTransfer?.types || [])].includes("Files")) {
-          e.preventDefault();
-          setIsImageDragActive(true);
-        }
-      }}
-      onDragLeave={() => setIsImageDragActive(false)}
-      onDrop={async (e) => {
-        e.preventDefault();
-        setIsImageDragActive(false);
-
-        const file = [...(e.dataTransfer?.files || [])]
-          .find((f) => f.type.startsWith("image/"));
-
-        if (file) {
-          await createImageNodeFromFile(
-            file,
-            screenToFlowPosition({ x: e.clientX, y: e.clientY })
-          );
-        }
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 12,
-          left: 12,
-          right: 12,
-          zIndex: 30,
-          display: "flex",
-          gap: 8,
-          flexWrap: "wrap",
-          pointerEvents: "none",
-        }}
-      >
-        <div style={{ position: "relative", pointerEvents: "auto" }}>
-          <button
-            className="bw-toolbar-button"
-            onClick={() => setNodeMenuOpen((v) => !v)}
-          >
-            + adicionar nó
-          </button>
-
-          {nodeMenuOpen && (
-            <div className="bw-node-menu">
-              <button className="bw-menu-button" onClick={() => addNode("TEXT")}>
-                caixa de texto
-              </button>
-              <button className="bw-menu-button" onClick={() => addNode("CHECKLIST")}>
-                lista
-              </button>
-              <button className="bw-menu-button" onClick={() => imageInputRef.current?.click()}>
-                imagem
-              </button>
-            </div>
-          )}
-        </div>
-
-        <input
-          ref={imageInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleImageSelected}
-          style={{ display: "none" }}
-        />
-
-        <button
-          className="bw-toolbar-button"
-          onClick={() => {
-            setEdgeMode((v) => !v);
-            setConnectionSourceId(null);
-          }}
-        >
-          {edgeMode ? "conexão ativa" : "conectar nós"}
-        </button>
-
-        <button
-          className="bw-toolbar-button"
-          onClick={() => setSettingsOpen((v) => !v)}
-        >
-          editar mapa
-        </button>
-
-        <button className="bw-toolbar-button bw-logout" onClick={handleLogout}>
-          salvar e sair
-        </button>
-      </div>
-
-      {settingsOpen && (
-        <div className="bw-map-settings">
-          <button className="bw-settings-action" onClick={cycleColor}>
-            mudar cor do mapa
-          </button>
-
-          <label>
-            <input
-              type="checkbox"
-              checked={noteEnabled}
-              onChange={async (e) => {
-                const value = e.target.checked;
-                setNoteEnabled(value);
-                await saveMapSettings({ nota_flutuante_ativa: value });
-              }}
-            />
-            nota flutuante
-          </label>
-
-          <label>
-            <input
-              type="checkbox"
-              checked={calendarEnabled}
-              onChange={async (e) => {
-                const value = e.target.checked;
-                setCalendarEnabled(value);
-                await saveMapSettings({ relogio_ativo: value });
-              }}
-            />
-            calendário / relógio
-          </label>
-        </div>
-      )}
-
-      {noteEnabled && (
-        <div
-          className={`bw-floating-note ${noteOpen ? "open" : ""}`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {noteOpen ? (
-            <textarea
-              autoFocus
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              onBlur={async () => {
-                setNoteOpen(false);
-                await saveMapSettings({ nota_flutuante: note });
-              }}
-              placeholder="nota rápida..."
-            />
-          ) : (
-            <button aria-label="Abrir nota" onClick={() => setNoteOpen(true)}>
-              ✎
-            </button>
-          )}
-        </div>
-      )}
-
-      {calendarEnabled && <div className="bw-map-clock">{clock}</div>}
-      {isImageDragActive && (
-        <div className="bw-image-drop">solte a imagem para criar um nó</div>
-      )}
-
-      <ReactFlow
-        nodes={nodesWithHandlers}
-        edges={edges}
-        onDoubleClick={onCanvasDoubleClick}
-        zoomOnDoubleClick={false}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onNodeClick={onNodeClick}
-        onNodeDoubleClick={onNodeDoubleClick}
-        onNodeDragStart={beginTransaction}
-        onNodeDragStop={finishTransaction}
-        onPaneClick={onPaneClick}
-        onEdgeClick={onEdgeClick}
-        onEdgeDoubleClick={onEdgeDoubleClick}
-        nodeTypes={nodeTypes}
-        fitView
-        defaultEdgeOptions={{ style: EDGE_STYLE, type: "default" }}
-        connectionLineStyle={EDGE_STYLE}
-        nodesConnectable={edgeMode}
-        nodesDraggable={!!editingNodeId}
-        elementsSelectable={false}
-        deleteKeyCode={null}
-        panOnDrag
-        zoomOnScroll={false}
-        zoomOnPinch
-        style={{ cursor: edgeMode ? "crosshair" : "default" }}
-      >
-        <Background color="rgba(72,171,179,.25)" gap={24} size={1.5} />
-        <Controls className="bw-flow-controls" />
-
-        {edges.map((edge) => {
-          if (!editingEdgeId || editingEdgeId !== edge.id) return null;
-
-          const source = nodes.find((n) => n.id === edge.source);
-          const target = nodes.find((n) => n.id === edge.target);
-          if (!source || !target) return null;
-
-          const [, x, y] = getBezierPath({
-            sourceX: source.position.x,
-            sourceY: source.position.y,
-            targetX: target.position.x,
-            targetY: target.position.y,
-            sourcePosition: Position.Right,
-            targetPosition: Position.Left,
-          });
-
-          return (
-            <EdgeLabelRenderer key={`editor-${edge.id}`}>
-              <div
-                className="bw-edge-editor"
-                style={{
-                  transform: `translate(-50%, -50%) translate(${x}px,${y}px)`,
-                }}
-              >
-                <input
-                  autoFocus
-                  value={edge.label || ""}
-                  onChange={(e) => updateEdgeLabel(edge.id, e.target.value)}
-                  onBlur={leaveEditing}
-                />
-              </div>
-            </EdgeLabelRenderer>
-          );
-        })}
-      </ReactFlow>
-    </div>
-  );
+import {useContext} from "react";
+import {AuthContext} from "../../context/AuthContext";
+import {nodeTypes} from "./nodeTypes";
+import {resolveTheme,THEMES} from "./themes";
+import {salvarMapa,salvarConfiguracaoMapa,getConfiguracoes} from "../../services/mapasApi";
+import {atualizarPreferenciasUsuario} from "../../services/usuarioApi";
+
+const EDGE_STYLE={stroke:"rgba(255,255,255,.72)",strokeWidth:2};
+const IMAGE_MAX_BYTES=4*1024*1024,HISTORY_LIMIT=80,DATA_HISTORY_DELAY=650;
+const isInput=e=>{const t=e?.target;return ["input","textarea","button"].includes(t?.tagName?.toLowerCase())||t?.isContentEditable};
+const uid=p=>window.crypto?.randomUUID?.()||`${p}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const cleanData=(d={})=>Object.fromEntries(Object.entries(d).filter(([k])=>!["onChange","onEditEnd","onResize","onResizeStart","onResizeEnd","editing","isSelected","accentColor","imageDeformable"].includes(k)));
+const payload=(nodes,edges)=>({nodes:nodes.map(n=>({id:n.id,type:n.type||"TEXT",position:n.position,data:cleanData(n.data)})),edges:edges.map(e=>({id:e.id,source:e.source,target:e.target,sourceHandle:e.sourceHandle||"right-source",targetHandle:e.targetHandle||"left-target",label:e.label||""}))});
+const clone=v=>JSON.parse(JSON.stringify(v));
+function initialData(type){if(type==="CHECKLIST")return{width:280,height:220,items:[{id:uid("item"),label:"Novo item",checked:false,level:0}]};if(type==="IMAGE")return{width:240,height:180,label:"Imagem",src:""};if(type==="EMBED")return{width:420,height:300,url:""};if(type==="CALCULATOR")return{width:260,height:340};return{width:240,height:170,label:"Novo texto"};}
+function textEditing(e){return isInput(e)}
+function clockText(){return new Intl.DateTimeFormat("pt-BR",{timeZone:"America/Sao_Paulo",dateStyle:"short",timeStyle:"medium"}).format(new Date())}
+function fileData(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(file)})}
+function imageDimensions(src){return new Promise(resolve=>{const i=new Image();i.onload=()=>resolve({width:i.naturalWidth,height:i.naturalHeight});i.onerror=()=>resolve({width:240,height:180});i.src=src})}
+
+export default function MapEditor({mapa,config:initialConfig}){
+ const {user,logout,updateUser}=useContext(AuthContext);const rf=useReactFlow();
+ const imageInput=useRef(null),replaceImageNode=useRef(null),saveTimer=useRef(null),saveQueue=useRef(Promise.resolve());
+ const past=useRef([]),future=useRef([]),pending=useRef(null),historyTimer=useRef(null),transaction=useRef(null),leaving=useRef(false);
+ const [config,setConfig]=useState(initialConfig||{});const theme=useMemo(()=>resolveTheme(config),[config]);
+ const initialNodes=useMemo(()=>mapa.nodes.map(n=>({id:String(n.id),type:n.type||"TEXT",position:n.position||{x:100,y:100},data:{...initialData(n.type||"TEXT"),...(n.data||{}),imageDeformable:!!config.imagem_deformavel}})),[mapa.nodes,config.imagem_deformavel]);
+ const initialEdges=useMemo(()=>mapa.edges.map(e=>({...e,id:String(e.id),source:String(e.source),target:String(e.target),sourceHandle:e.sourceHandle||"right-source",targetHandle:e.targetHandle||"left-target",style:EDGE_STYLE})),[mapa.edges]);
+ const [nodes,setNodesState]=useState(initialNodes),[edges,setEdgesState]=useState(initialEdges);const nodesRef=useRef(initialNodes),edgesRef=useRef(initialEdges);
+ const [editingNodeId,setEditingNodeId]=useState(null),[editingEdgeId,setEditingEdgeId]=useState(null),[focusedNodeId,setFocusedNodeId]=useState(null);
+ const [settingsOpen,setSettingsOpen]=useState(false),[addOpen,setAddOpen]=useState(false),[clock,setClock]=useState(clockText()),[noteOpen,setNoteOpen]=useState(!!mapa.nota_flutuante),[note,setNote]=useState(mapa.nota_flutuante||"");
+ const [searchOpen,setSearchOpen]=useState(false),[search,setSearch]=useState(""),[searchIndex,setSearchIndex]=useState(0);
+ const [context,setContext]=useState(null),[clipboard,setClipboard]=useState([]),[clipboardOpen,setClipboardOpen]=useState(false),[dragSelect,setDragSelect]=useState(null),[imageDrag,setImageDrag]=useState(false);
+ const setNodes=useCallback(u=>setNodesState(c=>{const n=typeof u==="function"?u(c):u;nodesRef.current=n;return n}),[]),setEdges=useCallback(u=>setEdgesState(c=>{const n=typeof u==="function"?u(c):u;edgesRef.current=n;return n}),[]);
+ useEffect(()=>{document.documentElement.style.setProperty("--bw-accent",theme.primary);document.documentElement.style.setProperty("--bw-bg",theme.secondary)},[theme]);
+ useEffect(()=>{const i=setInterval(()=>setClock(clockText()),1000);return()=>clearInterval(i)},[]);
+ useEffect(()=>{if(initialConfig)setConfig(initialConfig)},[initialConfig]);
+ const capture=useCallback(()=>({nodes:clone(payload(nodesRef.current,edgesRef.current).nodes),edges:clone(payload(nodesRef.current,edgesRef.current).edges)}),[]);
+ const serial=x=>JSON.stringify(x);
+ const pushHistory=useCallback((item,compare=true)=>{if(compare&&serial(item)===serial(capture()))return;if(!past.current.length||serial(past.current[past.current.length-1])!==serial(item))past.current.push(item);if(past.current.length>HISTORY_LIMIT)past.current.shift();future.current=[]},[capture]);
+ const commitHistory=useCallback(()=>{if(historyTimer.current)clearTimeout(historyTimer.current);historyTimer.current=null;if(pending.current){pushHistory(pending.current);pending.current=null}},[pushHistory]);
+ const beginHistory=useCallback(()=>{if(!pending.current&&!transaction.current)pending.current=capture();if(historyTimer.current)clearTimeout(historyTimer.current);historyTimer.current=setTimeout(commitHistory,DATA_HISTORY_DELAY)},[capture,commitHistory]);
+ const beginTransaction=useCallback(()=>{commitHistory();if(!transaction.current)transaction.current=capture()},[capture,commitHistory]);
+ const finishTransaction=useCallback(()=>{if(transaction.current){pushHistory(transaction.current);transaction.current=null}},[pushHistory]);
+ const undo=useCallback(()=>{finishTransaction();commitHistory();const p=past.current.pop();if(!p)return;future.current.push(capture());setNodes(p.nodes);setEdges(p.edges)},[capture,commitHistory,finishTransaction,setEdges,setNodes]);
+ const redo=useCallback(()=>{commitHistory();const n=future.current.pop();if(!n)return;past.current.push(capture());setNodes(n.nodes);setEdges(n.edges)},[capture,commitHistory,setEdges,setNodes]);
+ const center=useCallback(()=>rf.screenToFlowPosition({x:innerWidth/2,y:innerHeight/2}),[rf]);
+ const updateNodeData=useCallback((id,partial)=>{beginHistory();setNodes(ns=>ns.map(n=>n.id===id?{...n,data:{...n.data,...partial}}:n))},[beginHistory,setNodes]);
+ const resizeNode=useCallback((id,partial)=>setNodes(ns=>ns.map(n=>n.id===id?{...n,data:{...n.data,...partial}}:n)),[setNodes]);
+ const enterEdit=useCallback(id=>{setFocusedNodeId(id);setEditingNodeId(id);setEditingEdgeId(null);setContext(null)},[]);
+ const leaveEdit=useCallback(()=>{commitHistory();setEditingNodeId(null);setEditingEdgeId(null)},[commitHistory]);
+ const createNode=useCallback((type,pos,data={})=>{pushHistory(capture(),false);const n={id:uid("node"),type,position:pos||center(),data:{...initialData(type),...data}};setNodes(ns=>[...ns,n]);setFocusedNodeId(n.id);setEditingNodeId(n.id);setAddOpen(false)},[capture,center,pushHistory,setNodes]);
+ const addNode=useCallback(type=>{createNode(type,{...center(),x:center().x+(nodesRef.current.length%5)*25,y:center().y+(nodesRef.current.length%5)*25})},[center,createNode]);
+ const createImage=useCallback(async(file,pos)=>{if(!file?.type?.startsWith("image/"))return alert("Escolha uma imagem válida.");if(file.size>IMAGE_MAX_BYTES)return alert("Imagem muito grande. Limite de 4 MB.");const src=await fileData(file);const dim=await imageDimensions(src);const max=420;const scale=Math.min(1,max/dim.width);createNode("IMAGE",pos,{label:file.name,src,mimeType:file.type,size:file.size,naturalWidth:dim.width,naturalHeight:dim.height,width:Math.max(40,Math.round(dim.width*scale)),height:Math.max(40,Math.round(dim.height*scale))})},[createNode]);
+ const replaceImage=useCallback(async file=>{const id=replaceImageNode.current;if(!file||!id)return;const src=await fileData(file);const dim=await imageDimensions(src);updateNodeData(id,{src,label:file.name,naturalWidth:dim.width,naturalHeight:dim.height,width:Math.min(420,dim.width),height:Math.min(420,Math.round(dim.height*(Math.min(420,dim.width)/dim.width)))})},[updateNodeData]);
+ const createEdge=useCallback(c=>{if(!c.source||!c.target||c.source===c.target)return;if(edgesRef.current.some(e=>e.source===c.source&&e.target===c.target&&e.sourceHandle===c.sourceHandle&&e.targetHandle===c.targetHandle))return;pushHistory(capture(),false);setEdges(es=>addEdge({...c,id:uid("edge"),style:EDGE_STYLE,label:""},es))},[capture,pushHistory,setEdges]);
+ const removeNode=useCallback(id=>{pushHistory(capture(),false);setNodes(ns=>ns.filter(n=>n.id!==id));setEdges(es=>es.filter(e=>e.source!==id&&e.target!==id));setContext(null)},[capture,pushHistory,setEdges,setNodes]);
+ const removeEdge=useCallback(id=>{pushHistory(capture(),false);setEdges(es=>es.filter(e=>e.id!==id));setContext(null)},[capture,pushHistory,setEdges]);
+ const selectedNodes=nodes.filter(n=>n.selected),selectedEdges=edges.filter(e=>e.selected);
+ const copySelection=useCallback(async()=>{const ns=nodesRef.current.filter(n=>n.selected),es=edgesRef.current.filter(e=>e.selected);if(!ns.length&&!es.length&&focusedNodeId){const n=nodesRef.current.find(x=>x.id===focusedNodeId);if(n)ns.push(n)}if(!ns.length&&!es.length)return;const item={id:uid("clip"),label:ns.length+es.length>1?"múltiplos itens":ns[0]?.type==="IMAGE"?"imagem":(ns[0]?.data?.label||"texto").slice(0,80),nodes:clone(ns.map(n=>({id:n.id,type:n.type,position:n.position,data:cleanData(n.data)}))),edges:clone(es.map(e=>({id:e.id,source:e.source,target:e.target,sourceHandle:e.sourceHandle,targetHandle:e.targetHandle,label:e.label||""}))),kind:ns.length+es.length>1?"multi":ns[0]?.type||"TEXT"};
+  try{if(ns.length===1&&ns[0].type==="TEXT")await navigator.clipboard?.writeText(ns[0].data?.label||"")}catch{} setClipboard(c=>config.historico_clipboard_ativo===false?c:[item,...c.filter(x=>x.id!==item.id)].slice(0,6));
+ },[config.historico_clipboard_ativo,focusedNodeId]);
+ const pasteItem=useCallback(item=>{if(!item)return;pushHistory(capture(),false);const map=new Map();const ns=item.nodes.map(n=>{const id=uid("node");map.set(n.id,id);return{...clone(n),id,position:{x:n.position.x+40,y:n.position.y+40}}});const es=item.edges.filter(e=>map.has(e.source)&&map.has(e.target)).map(e=>({...e,id:uid("edge"),source:map.get(e.source),target:map.get(e.target),style:EDGE_STYLE}));setNodes(c=>[...c,...ns]);setEdges(c=>[...c,...es]);if(ns[0])setFocusedNodeId(ns[0].id);setClipboard(c=>[item,...c.filter(x=>x.id!==item.id)].slice(0,6))},[capture,pushHistory,setEdges,setNodes]);
+ const deleteSelected=useCallback(()=>{const ids=new Set(nodesRef.current.filter(n=>n.selected).map(n=>n.id));const eids=new Set(edgesRef.current.filter(e=>e.selected).map(e=>e.id));if(!ids.size&&!eids.size)return;pushHistory(capture(),false);setNodes(ns=>ns.filter(n=>!ids.has(n.id)));setEdges(es=>es.filter(e=>!eids.has(e.id)&&!ids.has(e.source)&&!ids.has(e.target)) )},[capture,pushHistory,setEdges,setNodes]);
+ const results=useMemo(()=>{const q=search.trim().toLowerCase();if(!q)return[];return nodes.filter(n=>n.type==="TEXT"||n.type==="CHECKLIST").filter(n=>{const t=n.type==="TEXT"?n.data?.label||"":(n.data?.items||[]).map(i=>i.label).join(" ");return t.toLowerCase().includes(q)}).map(n=>n.id)},[nodes,search]);
+ useEffect(()=>{if(!results.length)return;setSearchIndex(i=>Math.min(i,results.length-1));const id=results[searchIndex]||results[0];const n=nodes.find(x=>x.id===id);if(n)rf.setCenter(n.position.x+(Number(n.data?.width)||240)/2,n.position.y+(Number(n.data?.height)||170)/2,{zoom:rf.getViewport().zoom,duration:250})},[results,searchIndex,rf,nodes]);
+ const saveQueue=useCallback(data=>{const next=saveQueue.current.catch(()=>{}).then(()=>salvarMapa(mapa.id,data));saveQueue.current=next;return next},[mapa.id]);
+ const handleWheel=useCallback(e=>{if(e.target.closest?.("textarea,input,button,select"))return;e.preventDefault();const v=rf.getViewport();const rect=e.currentTarget.getBoundingClientRect();if(e.ctrlKey){const factor=e.deltaY<0?1.08:.92;const z=Math.min(4,Math.max(.2,v.zoom*factor));const px=e.clientX-rect.left,py=e.clientY-rect.top;rf.setViewport({x:px-(px-v.x)*(z/v.zoom),y:py-(py-v.y)*(z/v.zoom),zoom:z});return}if(e.shiftKey){rf.setViewport({...v,x:v.x-e.deltaY});return}rf.setViewport({...v,y:v.y-e.deltaY})},[rf]);
+ const saveSettings=useCallback(async(patch)=>{const c=await atualizarPreferenciasUsuario(patch);setConfig(c.configuracao||c);updateUser({configuracao:c.configuracao||c});return c},[updateUser]);
+ const saveNote=useCallback(async(v)=>{setNote(v);await salvarConfiguracaoMapa(mapa.id,{nota_flutuante:v})},[mapa.id]);
+ useEffect(()=>{if(leaving.current)return;clearTimeout(saveTimer.current);saveTimer.current=setTimeout(()=>saveQueue(payload(nodes,edges)).catch(console.error),1000);return()=>clearTimeout(saveTimer.current)},[nodes,edges,saveQueue]);
+ useEffect(()=>{const h=async e=>{const mod=e.ctrlKey||e.metaKey,k=e.key.toLowerCase();if(mod&&!e.altKey){if(k==="f"&&!textEditing(e)){e.preventDefault();setSearchOpen(true);setTimeout(()=>document.querySelector(".bw-search-input")?.focus(),0);return}if(k==="z"&&!e.shiftKey&&!textEditing(e)){e.preventDefault();undo();return}if((k==="y"||(k==="z"&&e.shiftKey))&&!textEditing(e)){e.preventDefault();redo();return}if(k==="c"&&!textEditing(e)){e.preventDefault();await copySelection();return}if(k==="v"&&!textEditing(e)){e.preventDefault();const item=clipboard[0];if(item)pasteItem(item);return}}if(e.key==="Delete"&&!textEditing(e)){e.preventDefault();deleteSelected();return}if(e.key==="Escape"){setContext(null);setSearchOpen(false);setSettingsOpen(false);leaveEdit()}};window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h)},[clipboard,copySelection,deleteSelected,leaveEdit,pasteItem,redo,undo]);
+ useEffect(()=>{let timer=null;const down=e=>{if(e.pointerType!=="touch")return;const nodeEl=e.target.closest?.(".react-flow__node");const edgeEl=e.target.closest?.(".react-flow__edge");if(!nodeEl&&!edgeEl)return;timer=setTimeout(()=>{const id=nodeEl?.getAttribute("data-id")||edgeEl?.getAttribute("data-id");if(nodeEl&&id){const n=nodesRef.current.find(x=>x.id===id);if(n)setContext({x:e.clientX,y:e.clientY,nodeId:id})}else if(edgeEl&&id){setContext({x:e.clientX,y:e.clientY,edgeId:id})}},5000)};const clear=()=>{if(timer){clearTimeout(timer);timer=null}};window.addEventListener("pointerdown",down);window.addEventListener("pointerup",clear);window.addEventListener("pointercancel",clear);window.addEventListener("pointermove",clear);return()=>{clear();window.removeEventListener("pointerdown",down);window.removeEventListener("pointerup",clear);window.removeEventListener("pointercancel",clear);window.removeEventListener("pointermove",clear)}},[]);
+ useEffect(()=>{const onDown=e=>{if(e.button===2){const pane=!e.target.closest(".react-flow__node,.react-flow__edge,.bw-sticky,.bw-context-menu");if(pane){const start={x:e.clientX,y:e.clientY};setDragSelect({start,current:start});const move=ev=>setDragSelect(d=>d?{...d,current:{x:ev.clientX,y:ev.clientY}}:d);const up=ev=>{setDragSelect(d=>{if(!d)return null;const a=Math.min(d.start.x,d.current.x),b=Math.max(d.start.x,d.current.x),c=Math.min(d.start.y,d.current.y),dd=Math.max(d.start.y,d.current.y);const v=rf.getViewport();setNodes(ns=>ns.map(n=>{const w=Number(n.data?.width)||240,h=Number(n.data?.height)||170;const sx=n.position.x*v.zoom+v.x,sy=n.position.y*v.zoom+v.y;const hit=sx<b&&sx+w*v.zoom>a&&sy<dd&&sy+h*v.zoom>c;return hit?{...n,selected:true}:n}));return null});window.removeEventListener("pointermove",move);window.removeEventListener("pointerup",up)};window.addEventListener("pointermove",move);window.addEventListener("pointerup",up)}}};window.addEventListener("pointerdown",onDown);return()=>window.removeEventListener("pointerdown",onDown)},[rf,setNodes]);
+ const nodeContext=(e,n)=>{e.preventDefault();e.stopPropagation();setContext({x:e.clientX,y:e.clientY,nodeId:n.id})};
+ const edgeContext=(e,e0)=>{e.preventDefault();e.stopPropagation();setContext({x:e.clientX,y:e.clientY,edgeId:e0.id})};
+ const paneClick=()=>{setContext(null);setClipboardOpen(false);setSettingsOpen(false);setAddOpen(false);setFocusedNodeId(null);if(searchOpen)setSearchOpen(false);leaveEdit()};
+ const nodeClick=(e,n)=>{if(e.nativeEvent?.pointerType==="touch"&&editingNodeId){setNodes(ns=>ns.map(x=>x.id===n.id?{...x,selected:!x.selected}:x));return}setFocusedNodeId(n.id)};
+ const nodeDouble=(e,n)=>{e.stopPropagation();enterEdit(n.id)};
+ const onChanges=changes=>setNodes(ns=>applyNodeChanges(changes,ns));
+ const edgeChanges=changes=>{if(changes.some(c=>c.type==="remove"))pushHistory(capture(),false);setEdges(es=>applyEdgeChanges(changes,es))};
+ const onResizeConfig=async(k,v)=>{setConfig(c=>({...c,[k]:v}));await saveSettings({[k]:v})};
+ const chooseTheme=async(name)=>{const next={...config,cor_mapa:name};setConfig(next);updateUser({configuracao:next});await saveSettings({cor_mapa:name})};
+ const contextNode=nodes.find(n=>n.id===context?.nodeId),contextEdge=edges.find(e=>e.id===context?.edgeId);
+ return <div className="bw-map-root" style={{background:theme.secondary}} onWheel={handleWheel} onContextMenu={e=>e.preventDefault()} onClick={e=>{if(e.target===e.currentTarget)paneClick()}} onDragOver={e=>{if([...e.dataTransfer.types].includes("Files")){e.preventDefault();setImageDrag(true)}}} onDragLeave={()=>setImageDrag(false)} onDrop={async e=>{e.preventDefault();setImageDrag(false);const f=[...e.dataTransfer.files].find(x=>x.type.startsWith("image/"));if(f)await createImage(f,rf.screenToFlowPosition({x:e.clientX,y:e.clientY}))}}>
+  {searchOpen&&<div className="bw-search-sticky"><input className="bw-search-input" value={search} onChange={e=>{setSearch(e.target.value);setSearchIndex(0)}} placeholder="pesquisar no mapa..."/><button onClick={()=>setSearchIndex(i=>results.length?(i-1+results.length)%results.length:0)}>←</button><span>{results.length?`${searchIndex+1}/${results.length}`:"0/0"}</span><button onClick={()=>setSearchIndex(i=>results.length?(i+1)%results.length:0)}>→</button></div>}
+  <div className="bw-topbar bw-sticky"><div style={{position:"relative"}}><button className="bw-toolbar-button" onClick={()=>setAddOpen(v=>!v)}>+ adicionar nó</button>{addOpen&&<div className="bw-node-menu"><button onClick={()=>addNode("TEXT")}>caixa de texto</button><button onClick={()=>addNode("CHECKLIST")}>lista</button><button onClick={()=>imageInput.current?.click()}>imagem</button><button onClick={()=>addNode("EMBED")}>embed</button><button onClick={()=>addNode("CALCULATOR")}>calculadora</button></div>}</div><input ref={imageInput} type="file" accept="image/*" hidden onChange={async e=>{const f=e.target.files?.[0];e.target.value="";if(replaceImageNode.current){await replaceImage(f);replaceImageNode.current=null}else if(f)await createImage(f)}}/><button className="bw-toolbar-button bw-logout" onClick={async()=>{leaving.current=true;commitHistory();await saveQueue(payload(nodesRef.current,edgesRef.current)).catch(()=>{});logout()}}>salvar e sair</button></div>
+  {config.nota_flutuante_ativa!==false&&<div className={`bw-floating-note bw-sticky ${noteOpen?"open":""}`} onClick={e=>e.stopPropagation()}>{noteOpen?<textarea autoFocus value={note} onChange={e=>setNote(e.target.value)} onBlur={()=>{setNoteOpen(false);saveNote(note)}} placeholder="nota rápida..."/>:<button onClick={()=>setNoteOpen(true)}>✎</button>}</div>}
+  {config.relogio_ativo!==false&&<div className="bw-map-clock bw-sticky">{clock}</div>}
+  {config.historico_clipboard_ativo!==false&&<div className={`bw-clipboard ${clipboardOpen?"open":""}`} onMouseEnter={()=>setClipboardOpen(true)} onClick={e=>e.stopPropagation()}><button onClick={()=>setClipboardOpen(v=>!v)} className="bw-clipboard-peek">▣</button>{clipboardOpen&&<div className="bw-clipboard-list">{clipboard.length?clipboard.map(i=><button key={i.id} onClick={()=>pasteItem(i)}>{i.label}</button>):<span>clipboard vazio</span>}</div>}</div>}
+  <button className="bw-config-sticky bw-sticky" onClick={e=>{e.stopPropagation();setSettingsOpen(v=>!v)}}>⚙</button>
+  {settingsOpen&&<div className="bw-config-panel bw-sticky" onClick={e=>e.stopPropagation()}><strong>CONFIG</strong><label>tema<select value={config.cor_mapa||"BRAINWEB"} onChange={e=>chooseTheme(e.target.value)}>{Object.keys(THEMES).map(k=><option key={k} value={k}>{THEMES[k].name}</option>)}</select></label>{[1,2].map(i=><React.Fragment key={i}><label>custom {i} primária<input value={config[`custom_${i}_primaria`]||"#48abb3"} onChange={e=>setConfig(c=>({...c,[`custom_${i}_primaria`]:e.target.value}))} onBlur={()=>saveSettings({[`custom_${i}_primaria`]:config[`custom_${i}_primaria`]})}/></label><label>custom {i} secundária<input value={config[`custom_${i}_secundaria`]||"#0f2f33"} onChange={e=>setConfig(c=>({...c,[`custom_${i}_secundaria`]:e.target.value}))} onBlur={()=>saveSettings({[`custom_${i}_secundaria`]:config[`custom_${i}_secundaria`]})}/></label></React.Fragment>)}<label><input type="checkbox" checked={config.historico_clipboard_ativo!==false} onChange={e=>onResizeConfig("historico_clipboard_ativo",e.target.checked)}/> histórico de clipboard</label><label><input type="checkbox" checked={!!config.imagem_deformavel} onChange={e=>onResizeConfig("imagem_deformavel",e.target.checked)}/> deformar imagens livremente</label><label><input type="checkbox" checked={config.nota_flutuante_ativa!==false} onChange={e=>onResizeConfig("nota_flutuante_ativa",e.target.checked)}/> nota flutuante</label><label><input type="checkbox" checked={config.relogio_ativo!==false} onChange={e=>onResizeConfig("relogio_ativo",e.target.checked)}/> relógio</label></div>}
+  {context&&<div className="bw-context-menu" style={{left:context.x,top:context.y}} onClick={e=>e.stopPropagation()}>{contextNode&&<>{<button onClick={()=>removeNode(contextNode.id)}>EXCLUIR</button>}{contextNode.type==="TEXT"&&<div className="bw-color-grid">{["default","green","yellow","red","white","transparent"].map(c=><button key={c} title={c} style={{background:c==="default"?theme.primary:c==="green"?"#34d46a":c==="yellow"?"#f1d44b":c==="red"?"#f05252":c==="white"?"#fff":"rgba(255,255,255,.3)"}} onClick={()=>{updateNodeData(contextNode.id,{textColor:c});setContext(null)}}/> )}</div>}{contextNode.type==="IMAGE"&&<><button onClick={()=>{replaceImageNode.current=contextNode.id;imageInput.current?.click();setContext(null)}}>TROCAR IMAGEM</button><button onClick={()=>{const w=Number(contextNode.data.naturalWidth)||240,h=Number(contextNode.data.naturalHeight)||180;updateNodeData(contextNode.id,{width:Math.min(420,w),height:Math.min(420,h)});setContext(null)}}>RESETAR DIMENSÕES</button></>}{contextNode.type==="CHECKLIST"&&<button onClick={()=>{const all=(contextNode.data.items||[]).every(i=>i.checked);updateNodeData(contextNode.id,{items:(contextNode.data.items||[]).map(i=>({...i,checked:!all}))});setContext(null)}}>MARCAR/DESMARCAR TODOS</button>}{contextNode.type==="EMBED"&&<button onClick={()=>enterEdit(contextNode.id)}>TROCAR LINK</button>}</>}{contextEdge&&<button onClick={()=>removeEdge(contextEdge.id)}>EXCLUIR</button>}</div>}
+  {imageDrag&&<div className="bw-image-drop">solte a imagem para criar um nó</div>}
+  {dragSelect&&<div className="bw-selection-box" style={{left:Math.min(dragSelect.start.x,dragSelect.current.x),top:Math.min(dragSelect.start.y,dragSelect.current.y),width:Math.abs(dragSelect.current.x-dragSelect.start.x),height:Math.abs(dragSelect.current.y-dragSelect.start.y)}}/>}
+  <ReactFlow nodes={nodes.map(n=>({...n,data:{...n.data,editing:editingNodeId===n.id,imageDeformable:!!config.imagem_deformavel,onChange:updateNodeData,onResize:resizeNode,onResizeStart:beginTransaction,onResizeEnd:finishTransaction}}))} edges={edges.map(e=>({...e,style:EDGE_STYLE}))} nodeTypes={nodeTypes} onNodesChange={onChanges} onEdgesChange={edgeChanges} onConnect={createEdge} onNodeClick={nodeClick} onNodeDoubleClick={nodeDouble} onNodeContextMenu={nodeContext} onEdgeContextMenu={edgeContext} onPaneClick={paneClick} onPaneContextMenu={e=>e.preventDefault()} onNodeDragStart={beginTransaction} onNodeDragStop={finishTransaction} onEdgeDoubleClick={(e,e0)=>{e.stopPropagation();setEditingEdgeId(e0.id)}} onEdgeClick={(e,e0)=>{e.stopPropagation();setEditingEdgeId(e0.id)}} selectionOnDrag selectNodesOnDrag elementsSelectable nodesConnectable nodesDraggable panOnDrag zoomOnScroll={false} zoomOnPinch deleteKeyCode={null} fitView defaultEdgeOptions={{style:EDGE_STYLE,type:"default"}} connectionLineStyle={EDGE_STYLE}>
+   <Background color="rgba(255,255,255,.12)" gap={24} size={1.5}/><Controls className="bw-flow-controls"/>
+   {edges.map(e=>editingEdgeId===e.id&&<EdgeLabelRenderer key={e.id}><div className="bw-edge-editor" style={{left:0,top:0}}><input autoFocus value={e.label||""} onChange={ev=>{beginHistory();setEdges(es=>es.map(x=>x.id===e.id?{...x,label:ev.target.value}:x))}} onBlur={leaveEdit}/></div></EdgeLabelRenderer>)}
+  </ReactFlow>
+ </div>;
 }
