@@ -4,7 +4,7 @@ import Handles from "./Handles";
 function uid(){return window.crypto?.randomUUID?.()||`item-${Date.now()}-${Math.random()}`}
 function normalize(data){ if(Array.isArray(data.items)&&data.items.length)return data.items; return [{id:"legacy",label:data.label||"Novo item",checked:!!data.checked,level:0}]; }
 export default function ChecklistNode({id:nodeId,data}){
-  const list=useMemo(()=>normalize(data),[data.items,data.label,data.checked]), editing=!!data.editing;
+  const list=normalize(data), editing=!!data.editing;
   const update=items=>data.onChange?.(nodeId,{items});
   const change=(item,patch)=>update(list.map(x=>x.id===item.id?{...x,...patch}:x));
   const remove=(item)=>{const next=list.filter(x=>x.id!==item.id);update(next.length?next:[{id:uid(),label:"",checked:false,level:0}])};

@@ -1,11 +1,11 @@
 import React,{useCallback,useEffect,useMemo,useRef,useState} from "react";
-import ReactFlow,{addEdge,applyEdgeChanges,applyNodeChanges,Background,Controls,EdgeLabelRenderer,getBezierPath,Position,useReactFlow} from "reactflow";
+import ReactFlow,{addEdge,applyEdgeChanges,applyNodeChanges,Background,Controls,EdgeLabelRenderer,useReactFlow} from "reactflow";
 import "reactflow/dist/style.css";
 import {useContext} from "react";
 import {AuthContext} from "../../context/AuthContext";
 import {nodeTypes} from "./nodeTypes";
 import {resolveTheme,THEMES} from "./themes";
-import {salvarMapa,salvarConfiguracaoMapa,getConfiguracoes} from "../../services/mapasApi";
+import {salvarMapa,salvarConfiguracaoMapa} from "../../services/mapasApi";
 import {atualizarPreferenciasUsuario} from "../../services/usuarioApi";
 
 const EDGE_STYLE={stroke:"rgba(255,255,255,.72)",strokeWidth:2};
@@ -22,7 +22,7 @@ function fileData(file){return new Promise((resolve,reject)=>{const r=new FileRe
 function imageDimensions(src){return new Promise(resolve=>{const i=new Image();i.onload=()=>resolve({width:i.naturalWidth,height:i.naturalHeight});i.onerror=()=>resolve({width:240,height:180});i.src=src})}
 
 export default function MapEditor({mapa,config:initialConfig}){
- const {user,logout,updateUser}=useContext(AuthContext);const rf=useReactFlow();
+ const {logout,updateUser}=useContext(AuthContext);const rf=useReactFlow();
  const imageInput=useRef(null),replaceImageNode=useRef(null),saveTimer=useRef(null),saveQueueRef=useRef(Promise.resolve());
  const past=useRef([]),future=useRef([]),pending=useRef(null),historyTimer=useRef(null),transaction=useRef(null),leaving=useRef(false);
  const [config,setConfig]=useState(initialConfig||{});const theme=useMemo(()=>resolveTheme(config),[config]);
@@ -58,7 +58,6 @@ export default function MapEditor({mapa,config:initialConfig}){
  const createEdge=useCallback(c=>{if(!c.source||!c.target||c.source===c.target)return;if(edgesRef.current.some(e=>e.source===c.source&&e.target===c.target&&e.sourceHandle===c.sourceHandle&&e.targetHandle===c.targetHandle))return;pushHistory(capture(),false);setEdges(es=>addEdge({...c,id:uid("edge"),style:EDGE_STYLE,label:""},es))},[capture,pushHistory,setEdges]);
  const removeNode=useCallback(id=>{pushHistory(capture(),false);setNodes(ns=>ns.filter(n=>n.id!==id));setEdges(es=>es.filter(e=>e.source!==id&&e.target!==id));setContext(null)},[capture,pushHistory,setEdges,setNodes]);
  const removeEdge=useCallback(id=>{pushHistory(capture(),false);setEdges(es=>es.filter(e=>e.id!==id));setContext(null)},[capture,pushHistory,setEdges]);
- const selectedNodes=nodes.filter(n=>n.selected),selectedEdges=edges.filter(e=>e.selected);
  const copySelection=useCallback(async()=>{const ns=nodesRef.current.filter(n=>n.selected),es=edgesRef.current.filter(e=>e.selected);if(!ns.length&&!es.length&&focusedNodeId){const n=nodesRef.current.find(x=>x.id===focusedNodeId);if(n)ns.push(n)}if(!ns.length&&!es.length)return;const item={id:uid("clip"),label:ns.length+es.length>1?"múltiplos itens":ns[0]?.type==="IMAGE"?"imagem":(ns[0]?.data?.label||"texto").slice(0,80),nodes:clone(ns.map(n=>({id:n.id,type:n.type,position:n.position,data:cleanData(n.data)}))),edges:clone(es.map(e=>({id:e.id,source:e.source,target:e.target,sourceHandle:e.sourceHandle,targetHandle:e.targetHandle,label:e.label||""}))),kind:ns.length+es.length>1?"multi":ns[0]?.type||"TEXT"};
   try{if(ns.length===1&&ns[0].type==="TEXT")await navigator.clipboard?.writeText(ns[0].data?.label||"")}catch{} setClipboard(c=>config.historico_clipboard_ativo===false?c:[item,...c.filter(x=>x.id!==item.id)].slice(0,6));
  },[config.historico_clipboard_ativo,focusedNodeId]);
