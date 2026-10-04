@@ -262,7 +262,7 @@ export default function LoginScreen({ onOpenMap }) {
     }).catch(function() {
       setMapTitle("Principal");
     });
-  }, [user?.id]);
+  }, [user]);
 
   function goRegister() {
     setScreen("register");
