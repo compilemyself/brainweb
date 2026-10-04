@@ -1,6 +1,7 @@
-import React, { useState, useContext } from "react";
+import React, { useState, useContext, useEffect } from "react";
 import { AuthContext } from "../context/AuthContext";
 import * as api from "../services/api";
+import { getMapaPrincipal } from "../services/mapasApi";
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap');
@@ -32,7 +33,8 @@ const styles = `
     font-weight: 400;
     letter-spacing: 0.02em;
     text-align: center;
-    margin-bottom: 40px;
+    line-height: 1.4;
+    margin-bottom: 32px;
     animation: fadeUp 0.6s ease both;
     animation-delay: 0.1s;
   }
@@ -193,6 +195,14 @@ const styles = `
     margin-bottom: 28px;
   }
 
+  .current-map {
+    margin-top: 20px;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    color: rgba(255,255,255,0.58);
+    text-align: center;
+  }
+
   .feedback {
     min-height: 18px;
     margin-top: 14px;
@@ -243,6 +253,16 @@ export default function LoginScreen({ onOpenMap }) {
   const [loginOpen, setLoginOpen] = useState(false);
   const [keepLogged, setKeepLogged] = useState(false);
   const [animKey, setAnimKey] = useState(0);
+  const [mapTitle, setMapTitle] = useState("Principal");
+
+  useEffect(function() {
+    if (!user) return;
+    getMapaPrincipal().then(function(mapa) {
+      setMapTitle(mapa?.titulo || "Principal");
+    }).catch(function() {
+      setMapTitle("Principal");
+    });
+  }, [user?.id]);
 
   function goRegister() {
     setScreen("register");
@@ -325,7 +345,9 @@ export default function LoginScreen({ onOpenMap }) {
       React.createElement("div", { className: "root" },
         React.createElement("div", { className: "card" },
           React.createElement("p", { className: "greeting" },
-            "Olá, ", user.nome, ". Que bom ter você de volta."),
+            React.createElement("span", null, "Olá, ", user.nome, "."),
+            React.createElement("br"),
+            React.createElement("span", null, "Que bom ter você de volta.")),
           React.createElement("div", { className: "btn-group" },
             React.createElement("button", {
               className: "btn primary",
@@ -335,7 +357,8 @@ export default function LoginScreen({ onOpenMap }) {
               className: "btn",
               onClick: logout
             }, "desconectar conta")
-          )
+          ),
+          React.createElement("p", { className: "current-map" }, "Mapa atual: ", mapTitle)
         )
       )
     );
