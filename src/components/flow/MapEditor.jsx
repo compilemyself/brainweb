@@ -229,6 +229,30 @@ export default function MapEditor({ mapa, config: initialConfig }) {
   }, [theme]);
 
   useEffect(() => {
+    const updateMobileViewportInset = () => {
+      const viewport = window.visualViewport;
+      if (!viewport) {
+        document.documentElement.style.setProperty("--bw-mobile-bottom-inset", "0px");
+        return;
+      }
+      const visibleBottom = viewport.height + viewport.offsetTop;
+      const inset = Math.max(0, window.innerHeight - visibleBottom);
+      document.documentElement.style.setProperty("--bw-mobile-bottom-inset", `${Math.round(inset)}px`);
+    };
+
+    updateMobileViewportInset();
+    window.addEventListener("resize", updateMobileViewportInset);
+    window.visualViewport?.addEventListener("resize", updateMobileViewportInset);
+    window.visualViewport?.addEventListener("scroll", updateMobileViewportInset);
+
+    return () => {
+      window.removeEventListener("resize", updateMobileViewportInset);
+      window.visualViewport?.removeEventListener("resize", updateMobileViewportInset);
+      window.visualViewport?.removeEventListener("scroll", updateMobileViewportInset);
+    };
+  }, []);
+
+  useEffect(() => {
     const timer = setInterval(() => setClock(clockText()), 1000);
     return () => clearInterval(timer);
   }, []);
