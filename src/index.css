@@ -735,7 +735,7 @@ select {
   .bw-config-panel {
     position: fixed;
     left: 64px;
-    bottom: calc(var(--bw-mobile-bottom-inset) + max(64px, calc(env(safe-area-inset-bottom) + 54px)));
+    bottom: calc(var(--bw-mobile-bottom-inset) + 64px);
     width: min(300px, calc(100vw - 64px));
   }
 
