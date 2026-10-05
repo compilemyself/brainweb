@@ -44,11 +44,11 @@ export async function registrar(nome, email, senha) {
   });
 }
 
-export async function login(email, senha) {
+export async function login(identificador, senha) {
   return requestJson("/auth/login", {
     method: "POST",
     body: JSON.stringify({
-      email,
+      identificador,
       senha,
     }),
   });

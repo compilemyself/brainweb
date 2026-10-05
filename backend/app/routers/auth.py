@@ -18,7 +18,7 @@ def get_servico(db: Session = Depends(get_db)) -> AutenticacaoServico:
 def registrar(dados: UsuarioCreate, servico: AutenticacaoServico = Depends(get_servico)): return servico.registrar(dados)
 
 @router.post("/login", response_model=TokenSchema)
-def login(dados: UsuarioLogin, servico: AutenticacaoServico = Depends(get_servico)): return servico.login(dados.email, dados.senha)
+def login(dados: UsuarioLogin, servico: AutenticacaoServico = Depends(get_servico)): return servico.login(dados.identificador, dados.senha)
 
 @router.get("/configuracoes", response_model=ConfiguracaoSchema)
 def configuracoes(usuario: Usuario = Depends(get_usuario_atual), db: Session = Depends(get_db)):

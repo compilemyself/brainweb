@@ -133,6 +133,9 @@ function ClipboardPreview({ item }) {
   if (item.kind === "MULTI") {
     return <div className="bw-clipboard-preview-text">múltiplas seleções</div>;
   }
+  if (item.kind === "EDGE") {
+    return <div className="bw-clipboard-preview-text">aresta: {item.label || "sem texto"}</div>;
+  }
 
   const node = item.nodes?.[0];
   if (!node) return <div className="bw-clipboard-preview-text">{item.label || "node"}</div>;
@@ -302,6 +305,11 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     setEditingEdgeId(null);
     setContext(null);
   }, []);
+  const enterEdgeEdit = useCallback((id) => {
+    setEditingNodeId(null);
+    setEditingEdgeId(id);
+    setContext(null);
+  }, []);
   const leaveEdit = useCallback(() => {
     commitHistory();
     setEditingNodeId(null);
@@ -408,6 +416,10 @@ export default function MapEditor({ mapa, config: initialConfig }) {
         await navigator.clipboard.writeText("múltiplas seleções");
         return;
       }
+      if (item.kind === "EDGE") {
+        await navigator.clipboard.writeText(item.label || "");
+        return;
+      }
       if (item.kind === "NODE") {
         const node = item.nodes?.[0];
         const text = node?.type === "TEXT"
@@ -427,6 +439,14 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     edges: [],
     kind: "NODE",
     previewType: node.type
+  }), []);
+
+  const makeEdgeItem = useCallback((edge) => ({
+    id: uid("clip"),
+    label: edge.label || "",
+    nodes: [],
+    edges: clone([{ id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle, label: edge.label || "" }]),
+    kind: "EDGE"
   }), []);
 
   const copySelection = useCallback(async () => {
@@ -459,6 +479,13 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     addClipboardItem(item);
   }, [addClipboardItem, focusedNodeId, makeNodeItem, writeClipboard]);
 
+  const copyEdge = useCallback(async (edge) => {
+    if (!edge) return;
+    const item = makeEdgeItem(edge);
+    await writeClipboard(item);
+    addClipboardItem(item);
+  }, [addClipboardItem, makeEdgeItem, writeClipboard]);
+
   const recordTextSelection = useCallback((text, node) => {
     if (!text || !node) return;
     const item = {
@@ -480,6 +507,10 @@ export default function MapEditor({ mapa, config: initialConfig }) {
   }, [writeClipboard]);
 
   const pasteItem = useCallback((item) => {
+    if (item?.kind === "TEXT" && item.text) {
+      createNode("TEXT", center(), { label: item.text });
+      return;
+    }
     if (!item?.nodes?.length) return;
     pushHistory(capture(), false);
     const idMap = new Map();
@@ -498,7 +529,7 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     setNodes((current) => [...current, ...newNodes]);
     setEdges((current) => [...current, ...newEdges]);
     if (newNodes[0]) setFocusedNodeId(newNodes[0].id);
-  }, [capture, pushHistory, setEdges, setNodes]);
+  }, [capture, center, createNode, pushHistory, setEdges, setNodes]);
 
   const deleteSelected = useCallback(() => {
     const nodeIds = new Set(nodesRef.current.filter((node) => node.selected).map((node) => node.id));
@@ -587,15 +618,19 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     return () => clearTimeout(saveTimer.current);
   }, [nodes, edges, saveQueue]);
 
+  const openSearch = useCallback(() => {
+    setSearchOpen(true);
+    setSearchIndex(0);
+    setTimeout(() => document.querySelector(".bw-search-input")?.focus(), 0);
+  }, []);
+
   useEffect(() => {
     const onKeyDown = async (e) => {
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
       if (mod && key === "f" && !e.altKey) {
         e.preventDefault();
-        setSearchOpen(true);
-        setSearchIndex(0);
-        setTimeout(() => document.querySelector(".bw-search-input")?.focus(), 0);
+        openSearch();
         return;
       }
       if (mod && !e.altKey && !isInput(e)) {
@@ -634,7 +669,7 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [clipboard, copySelection, deleteSelected, leaveEdit, pasteItem, redo, undo]);
+  }, [clipboard, copySelection, deleteSelected, leaveEdit, openSearch, pasteItem, redo, undo]);
 
   useEffect(() => {
     const onCopy = (event) => {
@@ -667,36 +702,65 @@ export default function MapEditor({ mapa, config: initialConfig }) {
   }, [addClipboardItem, recordTextSelection]);
 
   useEffect(() => {
-    let timer = null;
+    let timerEdit = null;
+    let timerContext = null;
+    let active = null;
+    let startX = 0;
+    let startY = 0;
+
+    const clear = () => {
+      if (timerEdit) clearTimeout(timerEdit);
+      if (timerContext) clearTimeout(timerContext);
+      timerEdit = null;
+      timerContext = null;
+      active = null;
+    };
+
     const onDown = (e) => {
       if (e.pointerType !== "touch") return;
+      if (e.target.closest?.(".bw-context-menu,.bw-sticky,.bw-node-menu,input,textarea,button,select")) return;
+
       const nodeElement = e.target.closest?.(".react-flow__node");
       const edgeElement = e.target.closest?.(".react-flow__edge");
-      if (!nodeElement && !edgeElement) return;
-      timer = setTimeout(() => {
-        const id = nodeElement?.getAttribute("data-id") || edgeElement?.getAttribute("data-id");
-        if (nodeElement && id) setContext({ x: e.clientX, y: e.clientY, nodeId: id });
-        else if (edgeElement && id) setContext({ x: e.clientX, y: e.clientY, edgeId: id });
-      }, 5000);
+      const pane = !nodeElement && !edgeElement;
+      const id = nodeElement?.getAttribute("data-id") || edgeElement?.getAttribute("data-id");
+      if (!pane && !id) return;
+
+      active = { type: pane ? "pane" : nodeElement ? "node" : "edge", id };
+      startX = e.clientX;
+      startY = e.clientY;
+
+      timerEdit = setTimeout(() => {
+        if (!active) return;
+        if (active.type === "node") enterEdit(active.id);
+        if (active.type === "edge") enterEdgeEdit(active.id);
+      }, 3000);
+
+      timerContext = setTimeout(() => {
+        if (!active) return;
+        setContext({ x: e.clientX, y: e.clientY, ...(active.type === "node" ? { nodeId: active.id } : active.type === "edge" ? { edgeId: active.id } : { general: true }) });
+        if (active.type === "node") enterEdit(active.id);
+        if (active.type === "edge") enterEdgeEdit(active.id);
+      }, 8000);
     };
-    const clear = () => {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
+
+    const onMove = (e) => {
+      if (!active || e.pointerType !== "touch") return;
+      if (Math.hypot(e.clientX - startX, e.clientY - startY) > 14) clear();
     };
+
     window.addEventListener("pointerdown", onDown);
     window.addEventListener("pointerup", clear);
     window.addEventListener("pointercancel", clear);
-    window.addEventListener("pointermove", clear);
+    window.addEventListener("pointermove", onMove);
     return () => {
       clear();
       window.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointerup", clear);
       window.removeEventListener("pointercancel", clear);
-      window.removeEventListener("pointermove", clear);
+      window.removeEventListener("pointermove", onMove);
     };
-  }, []);
+  }, [enterEdgeEdit, enterEdit]);
 
   useEffect(() => {
     const onDown = (e) => {
@@ -745,7 +809,10 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     setContext({ x: event.clientX, y: event.clientY, edgeId: edge.id });
   };
   const paneClick = () => {
-    setContext(null);
+    if (context) {
+      setContext(null);
+      return;
+    }
     setClipboardOpen(false);
     setSettingsOpen(false);
     setAddOpen(false);
@@ -754,6 +821,10 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     leaveEdit();
   };
   const nodeClick = (event, node) => {
+    if (context) {
+      setContext(null);
+      return;
+    }
     if (event.nativeEvent?.pointerType === "touch" && editingNodeId) {
       setNodes((current) => current.map((entry) => entry.id === node.id ? { ...entry, selected: !entry.selected } : entry));
       return;
@@ -779,6 +850,18 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     updateUser({ configuracao: next });
     await saveSettings({ cor_mapa: name });
   };
+  const copySelectionForNode = useCallback(async (node) => {
+    if (!node) return;
+    const item = makeNodeItem(node);
+    if (item.previewType === "IMAGE") {
+      item.kind = "IMAGE";
+      item.imageSrc = item.nodes[0]?.data?.src;
+      item.mimeType = item.nodes[0]?.data?.mimeType || "image/png";
+    }
+    await writeClipboard(item);
+    addClipboardItem(item);
+  }, [addClipboardItem, makeNodeItem, writeClipboard]);
+
   const contextNode = nodes.find((node) => node.id === context?.nodeId);
   const contextEdge = edges.find((edge) => edge.id === context?.edgeId);
 
@@ -788,6 +871,9 @@ export default function MapEditor({ mapa, config: initialConfig }) {
       style={{ background: theme.secondary }}
       onWheel={handleWheel}
       onContextMenu={(e) => e.preventDefault()}
+      onPointerDownCapture={(e) => {
+        if (context && !e.target.closest?.(".bw-context-menu")) setContext(null);
+      }}
       onClick={(e) => { if (e.target === e.currentTarget) paneClick(); }}
       onDragOver={(e) => {
         if ([...e.dataTransfer.types].includes("Files")) {
@@ -887,6 +973,8 @@ export default function MapEditor({ mapa, config: initialConfig }) {
 
       {context && <div className="bw-context-menu" style={{ left: context.x, top: context.y }} onClick={(e) => e.stopPropagation()}>
         {contextNode && <>
+          <button onClick={() => enterEdit(contextNode.id)}>MODIFICAR TEXTO</button>
+          <button onClick={() => { copySelectionForNode(contextNode); setContext(null); }}>COPIAR</button>
           <button onClick={() => removeNode(contextNode.id)}>EXCLUIR</button>
           {contextNode.type === "TEXT" && <div className="bw-color-grid">{["default", "green", "yellow", "red", "white", "transparent"].map((color) => <button key={color} title={color} style={{ background: color === "default" ? theme.primary : color === "green" ? "#34d46a" : color === "yellow" ? "#f1d44b" : color === "red" ? "#f05252" : color === "white" ? "#fff" : "rgba(255,255,255,.3)" }} onClick={() => { updateNodeData(contextNode.id, { textColor: color }); setContext(null); }} />)}</div>}
           {contextNode.type === "IMAGE" && <>
@@ -902,7 +990,16 @@ export default function MapEditor({ mapa, config: initialConfig }) {
           {contextNode.type === "CHECKLIST" && <button onClick={() => { const items = contextNode.data.items || []; const all = items.length > 0 && items.every((item) => item.checked); updateNodeData(contextNode.id, { items: items.map((item) => ({ ...item, checked: !all })) }); setContext(null); }}>MARCAR/DESMARCAR TODOS</button>}
           {contextNode.type === "EMBED" && <button onClick={() => enterEdit(contextNode.id)}>TROCAR LINK</button>}
         </>}
-        {contextEdge && <button onClick={() => removeEdge(contextEdge.id)}>EXCLUIR</button>}
+        {contextEdge && <>
+          <button onClick={() => enterEdgeEdit(contextEdge.id)}>MODIFICAR TEXTO</button>
+          <button onClick={() => { copyEdge(contextEdge); setContext(null); }}>COPIAR</button>
+          <button onClick={() => removeEdge(contextEdge.id)}>EXCLUIR</button>
+        </>}
+        {context?.general && <>
+          <button onClick={() => { createNode("TEXT", rf.screenToFlowPosition({ x: context.x, y: context.y })); setContext(null); }}>CRIAR NÓ</button>
+          <button onClick={() => { if (clipboard[0]) pasteItem(clipboard[0]); setContext(null); }}>COLAR</button>
+          <button onClick={() => { setContext(null); openSearch(); }}>PESQUISAR</button>
+        </>}
       </div>}
 
       {imageDrag && <div className="bw-image-drop">solte a imagem para criar um nó</div>}
@@ -931,11 +1028,11 @@ export default function MapEditor({ mapa, config: initialConfig }) {
         onNodeContextMenu={nodeContext}
         onEdgeContextMenu={edgeContext}
         onPaneClick={paneClick}
+        onPaneDoubleClick={(e) => { e.preventDefault(); rf.fitView({ duration: 250, padding: 0.1 }); }}
         onPaneContextMenu={(e) => e.preventDefault()}
         onNodeDragStart={beginTransaction}
         onNodeDragStop={finishTransaction}
-        onEdgeDoubleClick={(e, edge) => { e.stopPropagation(); setEditingEdgeId(edge.id); }}
-        onEdgeClick={(e, edge) => { e.stopPropagation(); setEditingEdgeId(edge.id); }}
+        onEdgeDoubleClick={(e, edge) => { e.stopPropagation(); enterEdgeEdit(edge.id); }}
         selectionOnDrag
         selectNodesOnDrag
         elementsSelectable
@@ -944,6 +1041,7 @@ export default function MapEditor({ mapa, config: initialConfig }) {
         panOnDrag
         zoomOnScroll={false}
         zoomOnPinch
+        zoomOnDoubleClick={false}
         deleteKeyCode={null}
         fitView
         defaultEdgeOptions={{ style: EDGE_STYLE, type: "default" }}

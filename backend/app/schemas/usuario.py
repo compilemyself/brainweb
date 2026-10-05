@@ -8,7 +8,7 @@ class UsuarioCreate(BaseModel):
     senha: str
 
 class UsuarioLogin(BaseModel):
-    email: EmailStr
+    identificador: str
     senha: str
 
 class ConfiguracaoSchema(BaseModel):

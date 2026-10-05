@@ -241,7 +241,7 @@ const styles = `
 export default function LoginScreen({ onOpenMap }) {
   const { user, login, logout } = useContext(AuthContext);
 
-  const [email, setEmail] = useState("");
+  const [identificador, setIdentificador] = useState("");
   const [senha, setSenha] = useState("");
   const [nomeCadastro, setNomeCadastro] = useState("");
   const [emailCadastro, setEmailCadastro] = useState("");
@@ -282,8 +282,8 @@ export default function LoginScreen({ onOpenMap }) {
   }
 
   async function handleLoginSubmit() {
-    if (!email.trim() || !senha) {
-      setFeedback("Informe e-mail e senha.");
+    if (!identificador.trim() || !senha) {
+      setFeedback("Informe nome de usuário ou e-mail e senha.");
       return;
     }
 
@@ -291,7 +291,7 @@ export default function LoginScreen({ onOpenMap }) {
     setFeedback("");
 
     try {
-      const data = await api.login(email.trim(), senha);
+      const data = await api.login(identificador.trim(), senha);
       login(data, keepLogged);
       setScreen("home");
       setLoginOpen(false);
@@ -426,12 +426,12 @@ export default function LoginScreen({ onOpenMap }) {
             ? React.createElement("div", { className: "login-expand", key: "expand-" + animKey },
               React.createElement("input", {
                 className: "input-field",
-                type: "email",
-                placeholder: "e-mail",
-                autoComplete: "email",
+                type: "text",
+                placeholder: "nome de usuário ou e-mail",
+                autoComplete: "username",
                 autoFocus: true,
-                value: email,
-                onChange: function(e) { setEmail(e.target.value); },
+                value: identificador,
+                onChange: function(e) { setIdentificador(e.target.value); },
                 onKeyDown: function(e) { submitOnEnter(e, handleLoginSubmit); }
               }),
               React.createElement("input", {

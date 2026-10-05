@@ -34,7 +34,7 @@ select {
 }
 
 .bw-sticky {
-  z-index: 50;
+  z-index: 500;
 }
 
 .bw-topbar {
@@ -392,7 +392,7 @@ select {
   position: absolute;
   right: 12px;
   bottom: 10px;
-  z-index: 60;
+  z-index: 600;
   display: flex;
   align-items: flex-end;
 }
@@ -556,7 +556,7 @@ select {
 
 .bw-context-menu {
   position: fixed;
-  z-index: 2000;
+  z-index: 3000;
   display: grid;
   gap: 5px;
   min-width: 180px;
@@ -682,14 +682,15 @@ select {
   }
 
   .bw-map-clock {
-    bottom: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
     font-size: 11px;
     padding: 6px 9px;
   }
 
   .bw-clipboard {
     right: 8px;
-    bottom: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    z-index: 600;
   }
 
   .bw-clipboard-peek,
@@ -708,7 +709,8 @@ select {
 
   .bw-config-sticky {
     left: 56px;
-    bottom: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    z-index: 600;
     width: 48px;
     height: 48px;
     min-width: 48px;
@@ -717,7 +719,8 @@ select {
 
   .react-flow__controls.bw-flow-controls {
     left: 8px !important;
-    bottom: 8px !important;
+    bottom: calc(8px + env(safe-area-inset-bottom)) !important;
+    z-index: 400 !important;
   }
 
   .bw-config-panel {
