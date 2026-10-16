@@ -1,8 +1,8 @@
 export const THEMES = {
   BRAINWEB: { name: "BRAINWEB", primary: "#48abb3", secondary: "#0f2f33" },
   GASAI: { name: "GASAI", primary: "#47b393", secondary: "#cf7b96" },
-  FLORA: { name: "FLORA", primary: "#44bd6e", secondary: "#ccc287" },
-  WORMS: { name: "WORMS", primary: "#ffa8d0", secondary: "#9cb458" },
+  FLORA: { name: "FLORA", primary: "#43e486", secondary: "#b39e65" },
+  WORMS: { name: "WORMS", primary: "#ffa8c9", secondary: "#99b145" },
   ANDROGYNOUS: { name: "ANDROGYNOUS", primary: "#f1ce31", secondary: "#734ca0" },
   MUD: { name: "MUD", primary: "#d3a373", secondary: "#7c97af" },
   BASIC: { name: "BASIC", primary: "#e9c397be", secondary: "#8d7c71" }, 

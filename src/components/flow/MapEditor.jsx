@@ -1062,6 +1062,7 @@ export default function MapEditor({ mapa, config: initialConfig }) {
         elementsSelectable
         nodesConnectable
         nodesDraggable
+        connectionRadius={48}
         panOnDrag
         zoomOnScroll={false}
         zoomOnPinch
@@ -1081,4 +1082,4 @@ export default function MapEditor({ mapa, config: initialConfig }) {
       </ReactFlow>
     </div>
   );
-}
+}gh
