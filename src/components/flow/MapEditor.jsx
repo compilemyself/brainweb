@@ -1082,4 +1082,4 @@ export default function MapEditor({ mapa, config: initialConfig }) {
       </ReactFlow>
     </div>
   );
-}gh
+}
