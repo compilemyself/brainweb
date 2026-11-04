@@ -18,6 +18,7 @@ class FlowEdgeSchema(BaseModel):
     sourceHandle: str = "right-source"
     targetHandle: str = "left-target"
     label: str = ""
+    visualType: str = "solid"
 
 class FlowSchema(BaseModel):
     nodes: List[FlowNodeSchema]

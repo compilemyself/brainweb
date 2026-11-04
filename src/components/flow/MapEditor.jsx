@@ -6,6 +6,7 @@ import {
   Background,
   Controls,
   EdgeLabelRenderer,
+  MarkerType,
   ReactFlow,
   useReactFlow
 } from "reactflow";
@@ -31,9 +32,14 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 const cleanData = (data = {}) => Object.fromEntries(
   Object.entries(data).filter(([key]) => ![
     "onChange", "onEditEnd", "onResize", "onResizeStart", "onResizeEnd",
-    "editing", "isSelected", "accentColor", "imageDeformable"
+    "editing", "isSelected", "accentColor", "imageDeformable", "searchMatch"
   ].includes(key))
 );
+const edgeStyle = (edge) => ({
+  ...edge,
+  style: edge.visualType === "dotted" ? { ...EDGE_STYLE, strokeDasharray: "5 5" } : EDGE_STYLE,
+  markerEnd: edge.visualType === "arrow" ? { type: MarkerType.ArrowClosed, color: EDGE_STYLE.stroke } : undefined
+});
 const payload = (nodes, edges) => ({
   nodes: nodes.map((n) => ({
     id: n.id,
@@ -47,7 +53,8 @@ const payload = (nodes, edges) => ({
     target: e.target,
     sourceHandle: e.sourceHandle || "right-source",
     targetHandle: e.targetHandle || "left-target",
-    label: e.label || ""
+    label: e.label || "",
+    visualType: e.visualType || "solid"
   }))
 });
 
@@ -181,14 +188,14 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     position: n.position || { x: 100, y: 100 },
     data: { ...initialData(n.type || "TEXT"), ...(n.data || {}) }
   })), [mapa.nodes]);
-  const initialEdges = useMemo(() => mapa.edges.map((e) => ({
+  const initialEdges = useMemo(() => mapa.edges.map((e) => edgeStyle({
     ...e,
     id: String(e.id),
     source: String(e.source),
     target: String(e.target),
     sourceHandle: e.sourceHandle || "right-source",
     targetHandle: e.targetHandle || "left-target",
-    style: EDGE_STYLE
+    visualType: e.visualType || "solid"
   })), [mapa.edges]);
 
   const [nodes, setNodesState] = useState(initialNodes);
@@ -206,11 +213,15 @@ export default function MapEditor({ mapa, config: initialConfig }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [searchIndex, setSearchIndex] = useState(0);
+  const [searchRun, setSearchRun] = useState(0);
+  const [searchSelection, setSearchSelection] = useState(null);
   const [context, setContext] = useState(null);
   const [clipboard, setClipboard] = useState([]);
   const [clipboardOpen, setClipboardOpen] = useState(false);
   const [dragSelect, setDragSelect] = useState(null);
+  const [mobileSelection, setMobileSelection] = useState(null);
   const [imageDrag, setImageDrag] = useState(false);
+  const ignorePaneClick = useRef(false);
 
   const setNodes = useCallback((update) => setNodesState((current) => {
     const next = typeof update === "function" ? update(current) : update;
@@ -402,8 +413,14 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     if (!connection.source || !connection.target || connection.source === connection.target) return;
     if (edgesRef.current.some((edge) => edge.source === connection.source && edge.target === connection.target && edge.sourceHandle === connection.sourceHandle && edge.targetHandle === connection.targetHandle)) return;
     pushHistory(capture(), false);
-    setEdges((current) => addEdge({ ...connection, id: uid("edge"), style: EDGE_STYLE, label: "" }, current));
+    setEdges((current) => addEdge({ ...connection, id: uid("edge"), style: EDGE_STYLE, label: "", visualType: "solid" }, current));
   }, [capture, pushHistory, setEdges]);
+
+  const updateEdgeVisualType = useCallback((id, visualType) => {
+    beginHistory();
+    setEdges((current) => current.map((edge) => edge.id === id ? { ...edge, visualType } : edge));
+    setContext(null);
+  }, [beginHistory, setEdges]);
 
   const removeNode = useCallback((id) => {
     pushHistory(capture(), false);
@@ -452,7 +469,7 @@ export default function MapEditor({ mapa, config: initialConfig }) {
         await navigator.clipboard.writeText(text);
       }
     } catch {
-      // Alguns navegadores bloqueiam acesso ao clipboard fora de HTTPS ou sem gesto do usuário.
+      return;
     }
   }, []);
 
@@ -469,7 +486,7 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     id: uid("clip"),
     label: edge.label || "",
     nodes: [],
-    edges: clone([{ id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle, label: edge.label || "" }]),
+    edges: clone([{ id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle, label: edge.label || "", visualType: edge.visualType || "solid" }]),
     kind: "EDGE"
   }), []);
 
@@ -483,13 +500,13 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     }
     if (!nodesToCopy.length && !selectedEdges.length) return;
 
-    const isMulti = nodesToCopy.length + selectedEdges.length > 1;
+    const isMulti = nodesToCopy.length + selectedEdges.length > 1 || (!nodesToCopy.length && selectedEdges.length > 0);
     const item = isMulti
       ? {
           id: uid("clip"),
           label: "múltiplas seleções",
           nodes: clone(nodesToCopy.map((node) => ({ id: node.id, type: node.type, position: node.position, data: cleanData(node.data) }))),
-          edges: clone(selectedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle, label: edge.label || "" }))),
+          edges: clone(selectedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle, label: edge.label || "", visualType: edge.visualType || "solid" }))),
           kind: "MULTI"
         }
       : makeNodeItem(nodesToCopy[0]);
@@ -535,6 +552,20 @@ export default function MapEditor({ mapa, config: initialConfig }) {
       createNode("TEXT", center(), { label: item.text });
       return;
     }
+    if (!item?.nodes?.length && item?.edges?.length) {
+      const existingNodeIds = new Set(nodesRef.current.map((node) => node.id));
+      const copiedEdges = item.edges.filter((edge) => existingNodeIds.has(edge.source) && existingNodeIds.has(edge.target)).map((edge) => ({
+        ...edge,
+        id: uid("edge"),
+        selected: false,
+        style: EDGE_STYLE,
+        visualType: edge.visualType || "solid"
+      }));
+      if (!copiedEdges.length) return;
+      pushHistory(capture(), false);
+      setEdges((current) => [...current, ...copiedEdges]);
+      return;
+    }
     if (!item?.nodes?.length) return;
     pushHistory(capture(), false);
     const idMap = new Map();
@@ -548,7 +579,8 @@ export default function MapEditor({ mapa, config: initialConfig }) {
       id: uid("edge"),
       source: idMap.get(edge.source),
       target: idMap.get(edge.target),
-      style: EDGE_STYLE
+      style: EDGE_STYLE,
+      visualType: edge.visualType || "solid"
     }));
     setNodes((current) => [...current, ...newNodes]);
     setEdges((current) => [...current, ...newEdges]);
@@ -585,16 +617,23 @@ export default function MapEditor({ mapa, config: initialConfig }) {
 
   const activeSearchResult = results.length ? results[Math.min(searchIndex, results.length - 1)] : null;
   useEffect(() => {
-    if (!activeSearchResult) return;
+    if (!activeSearchResult) {
+      setSearchSelection(null);
+      return;
+    }
     const node = nodes.find((entry) => entry.id === activeSearchResult.nodeId);
     if (!node) return;
     setSearchIndex((index) => Math.min(index, results.length - 1));
+    setEditingNodeId(node.id);
+    setEditingEdgeId(null);
+    setFocusedNodeId(node.id);
+    setSearchSelection({ ...activeSearchResult, length: search.trim().length, query: search.trim(), token: `${searchRun}:${node.id}:${activeSearchResult.itemIndex ?? ""}:${activeSearchResult.index}:${search}` });
     rf.setCenter(
       node.position.x + (Number(node.data?.width) || 240) / 2,
       node.position.y + (Number(node.data?.height) || 170) / 2,
       { zoom: rf.getViewport().zoom, duration: 250 }
     );
-  }, [activeSearchResult, nodes, results.length, rf]);
+  }, [activeSearchResult, nodes, results.length, rf, search, searchRun]);
 
   const saveQueue = useCallback((data) => {
     const next = saveQueueRef.current.catch(() => {}).then(() => salvarMapa(mapa.id, data));
@@ -609,7 +648,7 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     const rect = e.currentTarget.getBoundingClientRect();
     if (e.ctrlKey) {
       const factor = e.deltaY < 0 ? 1.08 : 0.92;
-      const zoom = Math.min(4, Math.max(0.2, viewport.zoom * factor));
+      const zoom = Math.min(4, Math.max(0.02, viewport.zoom * factor));
       const px = e.clientX - rect.left;
       const py = e.clientY - rect.top;
       rf.setViewport({ x: px - (px - viewport.x) * (zoom / viewport.zoom), y: py - (py - viewport.y) * (zoom / viewport.zoom), zoom });
@@ -645,6 +684,7 @@ export default function MapEditor({ mapa, config: initialConfig }) {
   const openSearch = useCallback(() => {
     setSearchOpen(true);
     setSearchIndex(0);
+    setSearchRun((run) => run + 1);
     setTimeout(() => document.querySelector(".bw-search-input")?.focus(), 0);
   }, []);
 
@@ -688,6 +728,7 @@ export default function MapEditor({ mapa, config: initialConfig }) {
         setContext(null);
         setSearchOpen(false);
         setSettingsOpen(false);
+        setMobileSelection(null);
         leaveEdit();
       }
     };
@@ -754,18 +795,20 @@ export default function MapEditor({ mapa, config: initialConfig }) {
       startX = e.clientX;
       startY = e.clientY;
 
-      timerEdit = setTimeout(() => {
-        if (!active) return;
-        if (active.type === "node") enterEdit(active.id);
-        if (active.type === "edge") enterEdgeEdit(active.id);
-      }, 3000);
+      if (!pane) {
+        timerEdit = setTimeout(() => {
+          if (!active) return;
+          if (active.type === "node") enterEdit(active.id);
+          if (active.type === "edge") enterEdgeEdit(active.id);
+        }, 3000);
 
-      timerContext = setTimeout(() => {
-        if (!active) return;
-        setContext({ x: e.clientX, y: e.clientY, ...(active.type === "node" ? { nodeId: active.id } : active.type === "edge" ? { edgeId: active.id } : { general: true }) });
-        if (active.type === "node") enterEdit(active.id);
-        if (active.type === "edge") enterEdgeEdit(active.id);
-      }, 8000);
+        timerContext = setTimeout(() => {
+          if (!active) return;
+          setContext({ x: e.clientX, y: e.clientY, ...(active.type === "node" ? { nodeId: active.id } : { edgeId: active.id }) });
+          if (active.type === "node") enterEdit(active.id);
+          if (active.type === "edge") enterEdgeEdit(active.id);
+        }, 8000);
+      }
     };
 
     const onMove = (e) => {
@@ -786,6 +829,32 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     };
   }, [enterEdgeEdit, enterEdit]);
 
+  const selectNodesInBox = useCallback((selection) => {
+    if (!selection) return;
+    const left = Math.min(selection.start.x, selection.current.x);
+    const right = Math.max(selection.start.x, selection.current.x);
+    const top = Math.min(selection.start.y, selection.current.y);
+    const bottom = Math.max(selection.start.y, selection.current.y);
+    const viewport = rf.getViewport();
+    setNodes((current) => current.map((node) => {
+      const width = Number(node.data?.width) || 240;
+      const height = Number(node.data?.height) || 170;
+      const x = node.position.x * viewport.zoom + viewport.x;
+      const y = node.position.y * viewport.zoom + viewport.y;
+      const hit = x < right && x + width * viewport.zoom > left && y < bottom && y + height * viewport.zoom > top;
+      return { ...node, selected: hit };
+    }));
+  }, [rf, setNodes]);
+
+  const finishMobileSelection = useCallback((x, y) => {
+    if (!mobileSelection) return;
+    selectNodesInBox(mobileSelection);
+    setMobileSelection(null);
+    ignorePaneClick.current = true;
+    window.setTimeout(() => { ignorePaneClick.current = false; }, 500);
+    setContext({ x: Math.max(8, Math.min(x, window.innerWidth - 210)), y: Math.max(8, Math.min(y, window.innerHeight - 250)), general: true });
+  }, [mobileSelection, selectNodesInBox]);
+
   useEffect(() => {
     const onDown = (e) => {
       if (e.button !== 2) return;
@@ -797,19 +866,7 @@ export default function MapEditor({ mapa, config: initialConfig }) {
       const up = () => {
         setDragSelect((selection) => {
           if (!selection) return null;
-          const left = Math.min(selection.start.x, selection.current.x);
-          const right = Math.max(selection.start.x, selection.current.x);
-          const top = Math.min(selection.start.y, selection.current.y);
-          const bottom = Math.max(selection.start.y, selection.current.y);
-          const viewport = rf.getViewport();
-          setNodes((current) => current.map((node) => {
-            const width = Number(node.data?.width) || 240;
-            const height = Number(node.data?.height) || 170;
-            const x = node.position.x * viewport.zoom + viewport.x;
-            const y = node.position.y * viewport.zoom + viewport.y;
-            const hit = x < right && x + width * viewport.zoom > left && y < bottom && y + height * viewport.zoom > top;
-            return hit ? { ...node, selected: true } : node;
-          }));
+          selectNodesInBox(selection);
           return null;
         });
         window.removeEventListener("pointermove", move);
@@ -820,7 +877,7 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     };
     window.addEventListener("pointerdown", onDown);
     return () => window.removeEventListener("pointerdown", onDown);
-  }, [rf, setNodes]);
+  }, [selectNodesInBox]);
 
   const nodeContext = (event, node) => {
     event.preventDefault();
@@ -833,8 +890,12 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     setContext({ x: event.clientX, y: event.clientY, edgeId: edge.id });
   };
   const paneClick = () => {
-    if (context) {
-      setContext(null);
+    if (ignorePaneClick.current) {
+      ignorePaneClick.current = false;
+      return;
+    }
+    if (mobileSelection || context) {
+      if (context) setContext(null);
       return;
     }
     setClipboardOpen(false);
@@ -888,6 +949,7 @@ export default function MapEditor({ mapa, config: initialConfig }) {
 
   const contextNode = nodes.find((node) => node.id === context?.nodeId);
   const contextEdge = edges.find((edge) => edge.id === context?.edgeId);
+  const hasSelection = nodes.some((node) => node.selected) || edges.some((edge) => edge.selected);
 
   return (
     <div
@@ -897,6 +959,27 @@ export default function MapEditor({ mapa, config: initialConfig }) {
       onContextMenu={(e) => e.preventDefault()}
       onPointerDownCapture={(e) => {
         if (context && !e.target.closest?.(".bw-context-menu")) setContext(null);
+        if (!mobileSelection || e.pointerType !== "touch" || e.target.closest?.(".bw-sticky,.bw-context-menu,.bw-node-menu,input,textarea,button,select,.react-flow__node,.react-flow__edge")) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (mobileSelection.phase === "ready") {
+          finishMobileSelection(e.clientX, e.clientY);
+        } else {
+          const point = { x: e.clientX, y: e.clientY };
+          setMobileSelection({ start: point, current: point, phase: "drawing" });
+        }
+      }}
+      onPointerMoveCapture={(e) => {
+        if (mobileSelection?.phase === "drawing" && e.pointerType === "touch") {
+          e.preventDefault();
+          setMobileSelection((current) => current ? { ...current, current: { x: e.clientX, y: e.clientY } } : current);
+        }
+      }}
+      onPointerUpCapture={(e) => {
+        if (mobileSelection?.phase === "drawing" && e.pointerType === "touch") {
+          e.preventDefault();
+          setMobileSelection((current) => current ? { ...current, phase: "ready" } : current);
+        }
       }}
       onClick={(e) => { if (e.target === e.currentTarget) paneClick(); }}
       onDragOver={(e) => {
@@ -982,6 +1065,11 @@ export default function MapEditor({ mapa, config: initialConfig }) {
       )}
 
       <button className="bw-config-sticky bw-sticky" onClick={(e) => { e.stopPropagation(); setSettingsOpen((value) => !value); }} aria-label="configurações">⚙</button>
+      <button className="bw-general-context-sticky bw-sticky" onClick={(e) => {
+        e.stopPropagation();
+        const rect = e.currentTarget.getBoundingClientRect();
+        setContext({ x: Math.max(8, rect.left - 170), y: Math.max(8, rect.top - 190), general: true });
+      }} aria-label="menu geral">⋯</button>
       {settingsOpen && <div className="bw-config-panel bw-sticky" onClick={(e) => e.stopPropagation()}>
         <strong>CONFIG</strong>
         <label>tema<select value={config.cor_mapa || "BRAINWEB"} onChange={(e) => chooseTheme(e.target.value)}>{Object.keys(THEMES).map((key) => <option key={key} value={key}>{THEMES[key].name}</option>)}</select></label>
@@ -1016,10 +1104,15 @@ export default function MapEditor({ mapa, config: initialConfig }) {
         </>}
         {contextEdge && <>
           <button onClick={() => enterEdgeEdit(contextEdge.id)}>MODIFICAR TEXTO</button>
+          <button onClick={() => updateEdgeVisualType(contextEdge.id, ({ solid: "dotted", dotted: "arrow", arrow: "solid" })[contextEdge.visualType || "solid"])}>ESTILO: {{ solid: "LINHA", dotted: "PONTILHADO", arrow: "SETA" }[contextEdge.visualType || "solid"]} · ALTERNAR</button>
           <button onClick={() => { copyEdge(contextEdge); setContext(null); }}>COPIAR</button>
           <button onClick={() => removeEdge(contextEdge.id)}>EXCLUIR</button>
         </>}
         {context?.general && <>
+          {hasSelection && <>
+            <button onClick={() => { copySelection(); setContext(null); }}>COPIAR SELEÇÃO</button>
+            <button onClick={() => { deleteSelected(); setContext(null); }}>EXCLUIR SELEÇÃO</button>
+          </>}
           <button onClick={() => { createNode("TEXT", rf.screenToFlowPosition({ x: context.x, y: context.y })); setContext(null); }}>CRIAR NÓ</button>
           <button onClick={() => { if (clipboard[0]) pasteItem(clipboard[0]); setContext(null); }}>COLAR</button>
           <button onClick={() => { setContext(null); openSearch(); }}>PESQUISAR</button>
@@ -1027,14 +1120,17 @@ export default function MapEditor({ mapa, config: initialConfig }) {
       </div>}
 
       {imageDrag && <div className="bw-image-drop">solte a imagem para criar um nó</div>}
-      {dragSelect && <div className="bw-selection-box" style={{ left: Math.min(dragSelect.start.x, dragSelect.current.x), top: Math.min(dragSelect.start.y, dragSelect.current.y), width: Math.abs(dragSelect.current.x - dragSelect.start.x), height: Math.abs(dragSelect.current.y - dragSelect.start.y) }} />}
+      {(dragSelect || mobileSelection) && <div className="bw-selection-box" style={{ left: Math.min((dragSelect || mobileSelection).start.x, (dragSelect || mobileSelection).current.x), top: Math.min((dragSelect || mobileSelection).start.y, (dragSelect || mobileSelection).current.y), width: Math.abs((dragSelect || mobileSelection).current.x - (dragSelect || mobileSelection).start.x), height: Math.abs((dragSelect || mobileSelection).current.y - (dragSelect || mobileSelection).start.y) }} />}
+      {mobileSelection && <div className="bw-mobile-selection-hint">{mobileSelection.phase === "ready" ? "Toque fora da seleção para concluir" : "Arraste para selecionar os nós"}</div>}
 
       <ReactFlow
         nodes={nodes.map((node) => ({
           ...node,
+          dragHandle: node.type === "EMBED" ? ".bw-embed-drag-zone" : undefined,
           data: {
             ...node.data,
             editing: editingNodeId === node.id,
+            searchMatch: searchSelection?.nodeId === node.id ? searchSelection : null,
             imageDeformable: !!config.imagem_deformavel,
             onChange: updateNodeData,
             onResize: resizeNode,
@@ -1042,7 +1138,7 @@ export default function MapEditor({ mapa, config: initialConfig }) {
             onResizeEnd: finishTransaction
           }
         }))}
-        edges={edges.map((edge) => ({ ...edge, style: EDGE_STYLE }))}
+        edges={edges.map(edgeStyle)}
         nodeTypes={nodeTypes}
         onNodesChange={onChanges}
         onEdgesChange={edgeChanges}
@@ -1052,7 +1148,15 @@ export default function MapEditor({ mapa, config: initialConfig }) {
         onNodeContextMenu={nodeContext}
         onEdgeContextMenu={edgeContext}
         onPaneClick={paneClick}
-        onPaneDoubleClick={(e) => { e.preventDefault(); rf.fitView({ duration: 250, padding: 0.1 }); }}
+        onPaneDoubleClick={(e) => {
+          e.preventDefault();
+          if (e.nativeEvent?.pointerType === "touch" || "ontouchstart" in window) {
+            setMobileSelection({ start: { x: e.clientX, y: e.clientY }, current: { x: e.clientX, y: e.clientY }, phase: "armed" });
+            setNodes((current) => current.map((node) => ({ ...node, selected: false })));
+          } else {
+            rf.fitView({ duration: 250, padding: 0.1 });
+          }
+        }}
         onPaneContextMenu={(e) => e.preventDefault()}
         onNodeDragStart={beginTransaction}
         onNodeDragStop={finishTransaction}
@@ -1062,8 +1166,10 @@ export default function MapEditor({ mapa, config: initialConfig }) {
         elementsSelectable
         nodesConnectable
         nodesDraggable
-        connectionRadius={48}
-        panOnDrag
+        connectionRadius={28}
+        minZoom={0.02}
+        maxZoom={4}
+        panOnDrag={!mobileSelection}
         zoomOnScroll={false}
         zoomOnPinch
         zoomOnDoubleClick={false}

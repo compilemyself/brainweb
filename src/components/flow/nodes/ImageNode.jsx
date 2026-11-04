@@ -34,7 +34,7 @@ export default function ImageNode({ id, data }) {
         />
       )}
       <Handles />
-      {editing && <div className="node-drag-handle bw-node-dragbar">arrastar</div>}
+      {editing && <div className="node-drag-handle bw-node-dragbar">editar</div>}
       {distorted && <span className="bw-image-distorted" title="Imagem fora da proporção original">↗</span>}
       {src ? (
         <img

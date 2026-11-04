@@ -11,4 +11,5 @@ class FlowEdge(Base):
     source_handle = Column(String(32), nullable=False, default="right-source", server_default="right-source")
     target_handle = Column(String(32), nullable=False, default="left-target", server_default="left-target")
     label = Column(Text, nullable=False, default="", server_default="")
+    visual_type = Column(String(16), nullable=False, default="solid", server_default="solid")
     criado_em = Column(DateTime(timezone=True), server_default=func.now())

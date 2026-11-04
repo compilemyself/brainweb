@@ -178,6 +178,18 @@ select {
   text-underline-offset: 2px;
 }
 
+.bw-md-line {
+  min-height: 22px;
+}
+
+.bw-md-line.level-1 {
+  margin-left: 18px;
+}
+
+.bw-md-line.level-2 {
+  margin-left: 36px;
+}
+
 .bw-md-heading {
   margin: 2px 0 6px;
   font-family: Helvetica, Arial, sans-serif;
@@ -216,6 +228,45 @@ select {
   height: 1px;
   background: rgba(255, 255, 255, 0.45);
   margin: 10px 0;
+}
+
+.bw-md-checklist-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bw-md-checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #fff;
+  cursor: pointer;
+}
+
+.bw-text-white {
+  font-family: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  color: #111 !important;
+}
+
+.bw-text-white .bw-markdown,
+.bw-text-white .bw-markdown * {
+  color: #111;
+  font-family: inherit;
+}
+
+.bw-text-white .bw-md-separator {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.bw-text-white .bw-md-checkbox {
+  accent-color: #111;
+}
+
+.bw-textarea::selection {
+  color: #111 !important;
+  background: #ffe36a !important;
+  -webkit-text-fill-color: #111 !important;
 }
 
 .bw-image-node {
@@ -290,8 +341,61 @@ select {
   border-radius: 5px;
 }
 
+.bw-embed-node {
+  gap: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 30px / 16px;
+}
+
+.bw-embed-node .bw-embed-frame,
+.bw-embed-node .bw-embed-placeholder {
+  position: absolute;
+  inset: 22px 4px;
+  width: calc(100% - 8px);
+  height: calc(100% - 44px);
+  border: 0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.bw-embed-node .bw-embed-drag-top {
+  position: absolute;
+  top: 0;
+  left: 3%;
+  right: 3%;
+  height: 22px;
+  min-height: 22px;
+  z-index: 25;
+  border-radius: 50% / 100%;
+  background: var(--bw-accent);
+  border: 2px solid rgba(255,255,255,.55);
+}
+
+.bw-embed-drag-bottom {
+  position: absolute;
+  left: 3%;
+  right: 3%;
+  bottom: 0;
+  height: 22px;
+  z-index: 25;
+  border-radius: 50% / 100%;
+  background: var(--bw-accent);
+  border: 2px solid rgba(255,255,255,.55);
+  cursor: grab;
+  touch-action: none;
+}
+
+.bw-embed-node .bw-embed-input {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 25px;
+  z-index: 30;
+  width: calc(100% - 16px);
+}
+
 .bw-embed-placeholder {
-  height: 100%;
   display: grid;
   place-items: center;
   text-align: center;
@@ -310,16 +414,27 @@ select {
 
 .bw-calculator-node {
   align-items: center;
-  overflow: hidden;
+  overflow: visible;
   aspect-ratio: 219 / 302;
 }
 
+.bw-calculator-node .bw-node-dragbar {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  right: 6px;
+  z-index: 15;
+}
+
 .bw-calculator-node iframe {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
   width: 100%;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
+  height: 100%;
   display: block;
+  border: 0;
+  border-radius: 6px;
 }
 
 .bw-calculator-link {
@@ -487,6 +602,22 @@ select {
   font-size: 20px;
 }
 
+.bw-general-context-sticky {
+  display: none;
+  position: fixed;
+  right: 8px;
+  bottom: calc(var(--bw-mobile-bottom-inset) + max(64px, calc(env(safe-area-inset-bottom) + 64px)));
+  z-index: 1300;
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.58);
+  color: #fff;
+  font-size: 25px;
+  cursor: pointer;
+}
+
 .react-flow__controls.bw-flow-controls {
   left: 10px !important;
   bottom: 10px !important;
@@ -631,6 +762,21 @@ select {
   pointer-events: none;
 }
 
+.bw-mobile-selection-hint {
+  position: fixed;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1300;
+  padding: 7px 11px;
+  border-radius: 8px;
+  background: rgba(15, 25, 27, 0.95);
+  color: #fff;
+  font-size: 12px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 .bw-load-error,
 .bw-app-loading {
   min-height: 100vh;
@@ -724,6 +870,10 @@ select {
     min-height: 48px;
   }
 
+  .bw-general-context-sticky {
+    display: block;
+  }
+
   .react-flow__controls.bw-flow-controls {
     position: fixed !important;
     left: 8px !important;
@@ -783,5 +933,16 @@ select {
 
   .react-flow__handle-bottom {
     bottom: -21px !important;
+  }
+
+  .bw-embed-node .bw-embed-drag-top,
+  .bw-embed-drag-bottom {
+    height: 22px;
+  }
+
+  .bw-embed-node .bw-embed-frame,
+  .bw-embed-node .bw-embed-placeholder {
+    inset: 22px 4px;
+    height: calc(100% - 44px);
   }
 }

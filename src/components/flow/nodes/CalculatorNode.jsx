@@ -13,7 +13,7 @@ export default function CalculatorNode({ id, data }) {
   return (
     <div
       className="bw-node bw-calculator-node"
-      style={{ width, height, padding: 4, background: "var(--bw-accent,#48abb3)" }}
+      style={{ width, height, padding: 0, background: "var(--bw-accent,#48abb3)" }}
     >
       {editing && (
         <NodeResizer
@@ -28,13 +28,12 @@ export default function CalculatorNode({ id, data }) {
         />
       )}
       <Handles />
-      {editing && <div className="node-drag-handle bw-node-dragbar">arrastar</div>}
+      {editing && <div className="node-drag-handle bw-node-dragbar">editar</div>}
       <iframe
         title="Calculadora"
         src="https://calculator-1.com/outdoor/?f=dedede&r=ffffff"
         scrolling="no"
         frameBorder="0"
-        style={{ width: "100%", height: "100%", display: "block", borderRadius: 4 }}
       />
       <a
         className="bw-calculator-link"
