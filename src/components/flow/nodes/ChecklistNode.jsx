@@ -36,15 +36,24 @@ export default function ChecklistNode({ id: nodeId, data }) {
   }, [focusId, list]);
 
   useEffect(() => {
-    const match = data.searchMatch;
+    const match = data.editSelection;
     if (!editing || !match || match.type !== "CHECKLIST") return;
     const item = list[match.itemIndex];
-    if (!item) return;
-    if (searchTokenRef.current === match.token) return;
+    if (!item || searchTokenRef.current === match.token) return;
     searchTokenRef.current = match.token;
     selectionRef.current = { id: item.id, start: match.index, end: match.index + match.length };
     setFocusId(item.id);
-  }, [data.searchMatch, editing, list]);
+  }, [data.editSelection, editing, list]);
+
+  const renderLabel = (item, index) => {
+    const match = data.searchMatch;
+    const text = item.label || "\u00a0";
+    if (!match || match.type !== "CHECKLIST" || match.itemIndex !== index) return text;
+    const start = Math.max(0, match.index);
+    const end = Math.min(text.length, start + match.length);
+    if (end <= start) return text;
+    return <>{text.slice(0, start)}<mark className="bw-search-hit">{text.slice(start, end)}</mark>{text.slice(end)}</>;
+  };
 
   const update = (items) => data.onChange?.(nodeId, { items });
   const change = (item, patch) => update(list.map((x) => x.id === item.id ? { ...x, ...patch } : x));
@@ -160,7 +169,7 @@ export default function ChecklistNode({ id: nodeId, data }) {
       <Handles />
       {editing && <div className="node-drag-handle bw-node-dragbar">editar</div>}
       <div className="nowheel bw-checklist" style={{ overflow: "auto", flex: 1, minHeight: 0 }}>
-        {list.map((item) => {
+        {list.map((item, itemIndex) => {
           const level = Math.min(2, Math.max(0, item.level || 0));
           const visible = editing || level <= 1;
           if (!visible) return null;
@@ -194,7 +203,7 @@ export default function ChecklistNode({ id: nodeId, data }) {
                   }}
                 />
               ) : (
-                <span>{item.label || "\u00a0"}</span>
+                <span>{renderLabel(item, itemIndex)}</span>
               )}
               {editing && (
                 <button type="button" className="nodrag bw-inline-delete" onClick={() => remove(item)}>×</button>

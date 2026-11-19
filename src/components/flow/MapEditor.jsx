@@ -62,7 +62,7 @@ function initialData(type) {
   if (type === "CHECKLIST") return { width: 280, height: 220, items: [{ id: uid("item"), label: "Novo item", checked: false, level: 0 }] };
   if (type === "IMAGE") return { width: 240, height: 180, label: "Imagem", src: "" };
   if (type === "EMBED") return { width: 420, height: 300, url: "" };
-  if (type === "CALCULATOR") return { width: 260, height: 359 };
+  if (type === "CALCULATOR") return { width: 210, height: 309 };
   return { width: 240, height: 170, label: "Novo texto" };
 }
 
@@ -182,12 +182,20 @@ export default function MapEditor({ mapa, config: initialConfig }) {
 
   const [config, setConfig] = useState(initialConfig || {});
   const theme = useMemo(() => resolveTheme(config), [config]);
-  const initialNodes = useMemo(() => mapa.nodes.map((n) => ({
-    id: String(n.id),
-    type: n.type || "TEXT",
-    position: n.position || { x: 100, y: 100 },
-    data: { ...initialData(n.type || "TEXT"), ...(n.data || {}) }
-  })), [mapa.nodes]);
+  const initialNodes = useMemo(() => mapa.nodes.map((n) => {
+    const type = n.type || "TEXT";
+    const data = { ...initialData(type), ...(n.data || {}) };
+    if (type === "CALCULATOR" && Number(data.width) === 260 && Number(data.height) === 359) {
+      data.width = 210;
+      data.height = 309;
+    }
+    return {
+      id: String(n.id),
+      type,
+      position: n.position || { x: 100, y: 100 },
+      data
+    };
+  }), [mapa.nodes]);
   const initialEdges = useMemo(() => mapa.edges.map((e) => edgeStyle({
     ...e,
     id: String(e.id),
@@ -215,6 +223,7 @@ export default function MapEditor({ mapa, config: initialConfig }) {
   const [searchIndex, setSearchIndex] = useState(0);
   const [searchRun, setSearchRun] = useState(0);
   const [searchSelection, setSearchSelection] = useState(null);
+  const [editSearchSelection, setEditSearchSelection] = useState(null);
   const [context, setContext] = useState(null);
   const [clipboard, setClipboard] = useState([]);
   const [clipboardOpen, setClipboardOpen] = useState(false);
@@ -222,6 +231,8 @@ export default function MapEditor({ mapa, config: initialConfig }) {
   const [mobileSelection, setMobileSelection] = useState(null);
   const [imageDrag, setImageDrag] = useState(false);
   const ignorePaneClick = useRef(false);
+  const lastPaneTapRef = useRef(0);
+  const lastPointerTypeRef = useRef("mouse");
 
   const setNodes = useCallback((update) => setNodesState((current) => {
     const next = typeof update === "function" ? update(current) : update;
@@ -436,8 +447,7 @@ export default function MapEditor({ mapa, config: initialConfig }) {
   }, [capture, pushHistory, setEdges]);
 
   const addClipboardItem = useCallback((item) => {
-    if (config.historico_clipboard_ativo === false) return;
-    setClipboard((current) => [item, ...current.filter((entry) => entry.id !== item.id)].slice(0, 6));
+    setClipboard((current) => [item, ...current.filter((entry) => entry.id !== item.id)].slice(0, config.historico_clipboard_ativo === false ? 1 : 6));
   }, [config.historico_clipboard_ativo]);
 
   const writeClipboard = useCallback(async (item) => {
@@ -624,10 +634,13 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     const node = nodes.find((entry) => entry.id === activeSearchResult.nodeId);
     if (!node) return;
     setSearchIndex((index) => Math.min(index, results.length - 1));
-    setEditingNodeId(node.id);
-    setEditingEdgeId(null);
-    setFocusedNodeId(node.id);
-    setSearchSelection({ ...activeSearchResult, length: search.trim().length, query: search.trim(), token: `${searchRun}:${node.id}:${activeSearchResult.itemIndex ?? ""}:${activeSearchResult.index}:${search}` });
+    setSearchSelection({
+      ...activeSearchResult,
+      length: search.trim().length,
+      end: activeSearchResult.index + search.trim().length,
+      query: search.trim(),
+      token: `${searchRun}:${node.id}:${activeSearchResult.itemIndex ?? ""}:${activeSearchResult.index}:${search}`
+    });
     rf.setCenter(
       node.position.x + (Number(node.data?.width) || 240) / 2,
       node.position.y + (Number(node.data?.height) || 170) / 2,
@@ -682,11 +695,29 @@ export default function MapEditor({ mapa, config: initialConfig }) {
   }, [nodes, edges, saveQueue]);
 
   const openSearch = useCallback(() => {
+    setEditingNodeId(null);
+    setEditingEdgeId(null);
+    setSearchSelection(null);
     setSearchOpen(true);
     setSearchIndex(0);
     setSearchRun((run) => run + 1);
     setTimeout(() => document.querySelector(".bw-search-input")?.focus(), 0);
   }, []);
+
+  const enterSearchResult = useCallback(() => {
+    if (!activeSearchResult) return;
+    const selection = {
+      ...activeSearchResult,
+      length: search.trim().length,
+      token: `edit:${searchRun}:${activeSearchResult.nodeId}:${activeSearchResult.itemIndex ?? ""}:${activeSearchResult.index}:${search}`
+    };
+    setEditSearchSelection(selection);
+    setFocusedNodeId(activeSearchResult.nodeId);
+    setEditingNodeId(activeSearchResult.nodeId);
+    setEditingEdgeId(null);
+    setSearchSelection(null);
+    setSearchOpen(false);
+  }, [activeSearchResult, search, searchRun]);
 
   useEffect(() => {
     const onKeyDown = async (e) => {
@@ -844,7 +875,8 @@ export default function MapEditor({ mapa, config: initialConfig }) {
       const hit = x < right && x + width * viewport.zoom > left && y < bottom && y + height * viewport.zoom > top;
       return { ...node, selected: hit };
     }));
-  }, [rf, setNodes]);
+    setEdges((current) => current.map((edge) => ({ ...edge, selected: false })));
+  }, [rf, setEdges, setNodes]);
 
   const finishMobileSelection = useCallback((x, y) => {
     if (!mobileSelection) return;
@@ -857,26 +889,40 @@ export default function MapEditor({ mapa, config: initialConfig }) {
 
   useEffect(() => {
     const onDown = (e) => {
-      if (e.button !== 2) return;
+      lastPointerTypeRef.current = e.pointerType || "mouse";
+      if (e.button !== 2 || e.pointerType === "touch") return;
       const pane = !e.target.closest(".react-flow__node,.react-flow__edge,.bw-sticky,.bw-context-menu");
       if (!pane) return;
+      e.preventDefault();
+      e.stopPropagation();
       const start = { x: e.clientX, y: e.clientY };
-      setDragSelect({ start, current: start });
-      const move = (event) => setDragSelect((current) => current ? { ...current, current: { x: event.clientX, y: event.clientY } } : current);
-      const up = () => {
-        setDragSelect((selection) => {
-          if (!selection) return null;
-          selectNodesInBox(selection);
-          return null;
-        });
+      const selection = { start, current: start };
+      let moved = false;
+      setDragSelect(selection);
+
+      const move = (event) => {
+        selection.current = { x: event.clientX, y: event.clientY };
+        moved = moved || Math.hypot(selection.current.x - start.x, selection.current.y - start.y) > 4;
+        setDragSelect({ ...selection });
+      };
+      const up = (event) => {
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
+        if (moved) selectNodesInBox(selection);
+        setDragSelect(null);
+        ignorePaneClick.current = true;
+        window.setTimeout(() => { ignorePaneClick.current = false; }, 500);
+        setContext({
+          x: Math.max(8, Math.min(event.clientX, window.innerWidth - 210)),
+          y: Math.max(8, Math.min(event.clientY, window.innerHeight - 250)),
+          general: true
+        });
       };
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", up);
     };
-    window.addEventListener("pointerdown", onDown);
-    return () => window.removeEventListener("pointerdown", onDown);
+    window.addEventListener("pointerdown", onDown, true);
+    return () => window.removeEventListener("pointerdown", onDown, true);
   }, [selectNodesInBox]);
 
   const nodeContext = (event, node) => {
@@ -950,16 +996,38 @@ export default function MapEditor({ mapa, config: initialConfig }) {
   const contextNode = nodes.find((node) => node.id === context?.nodeId);
   const contextEdge = edges.find((edge) => edge.id === context?.edgeId);
   const hasSelection = nodes.some((node) => node.selected) || edges.some((edge) => edge.selected);
+  const hasFocusedNode = nodes.some((node) => node.id === focusedNodeId);
 
   return (
     <div
       className="bw-map-root"
       style={{ background: theme.secondary }}
       onWheel={handleWheel}
-      onContextMenu={(e) => e.preventDefault()}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        const blocked = e.target.closest?.(".react-flow__node,.react-flow__edge,.bw-sticky,.bw-context-menu");
+        if (lastPointerTypeRef.current !== "touch" && !blocked) {
+          setContext({ x: Math.max(8, Math.min(e.clientX, window.innerWidth - 210)), y: Math.max(8, Math.min(e.clientY, window.innerHeight - 250)), general: true });
+        }
+      }}
       onPointerDownCapture={(e) => {
+        lastPointerTypeRef.current = e.pointerType || "mouse";
         if (context && !e.target.closest?.(".bw-context-menu")) setContext(null);
-        if (!mobileSelection || e.pointerType !== "touch" || e.target.closest?.(".bw-sticky,.bw-context-menu,.bw-node-menu,input,textarea,button,select,.react-flow__node,.react-flow__edge")) return;
+        const blocked = e.target.closest?.(".bw-sticky,.bw-context-menu,.bw-node-menu,input,textarea,button,select,.react-flow__node,.react-flow__edge");
+        if (e.pointerType === "touch" && !blocked && !mobileSelection) {
+          const now = Date.now();
+          if (now - lastPaneTapRef.current < 350) {
+            e.preventDefault();
+            e.stopPropagation();
+            const point = { x: e.clientX, y: e.clientY };
+            setNodes((current) => current.map((node) => ({ ...node, selected: false })));
+            setMobileSelection({ start: point, current: point, phase: "drawing" });
+            lastPaneTapRef.current = 0;
+            return;
+          }
+          lastPaneTapRef.current = now;
+        }
+        if (!mobileSelection || e.pointerType !== "touch" || blocked) return;
         e.preventDefault();
         e.stopPropagation();
         if (mobileSelection.phase === "ready") {
@@ -998,10 +1066,10 @@ export default function MapEditor({ mapa, config: initialConfig }) {
     >
       {searchOpen && (
         <div className="bw-search-sticky">
-          <input className="bw-search-input" value={search} onChange={(e) => { setSearch(e.target.value); setSearchIndex(0); }} placeholder="pesquisar no mapa..." />
-          <button onClick={() => setSearchIndex((index) => results.length ? (index - 1 + results.length) % results.length : 0)} aria-label="resultado anterior">←</button>
+          <input className="bw-search-input" value={search} onChange={(e) => { setSearch(e.target.value); setSearchIndex(0); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); enterSearchResult(); } }} placeholder="pesquisar no mapa..." />
+          <button onMouseDown={(e) => e.preventDefault()} onClick={() => setSearchIndex((index) => results.length ? (index - 1 + results.length) % results.length : 0)} aria-label="resultado anterior">←</button>
           <span>{results.length ? `${Math.min(searchIndex + 1, results.length)}/${results.length}` : "0/0"}</span>
-          <button onClick={() => setSearchIndex((index) => results.length ? (index + 1) % results.length : 0)} aria-label="próximo resultado">→</button>
+          <button onMouseDown={(e) => e.preventDefault()} onClick={() => setSearchIndex((index) => results.length ? (index + 1) % results.length : 0)} aria-label="próximo resultado">→</button>
         </div>
       )}
 
@@ -1074,19 +1142,20 @@ export default function MapEditor({ mapa, config: initialConfig }) {
         <strong>CONFIG</strong>
         <label>tema<select value={config.cor_mapa || "BRAINWEB"} onChange={(e) => chooseTheme(e.target.value)}>{Object.keys(THEMES).map((key) => <option key={key} value={key}>{THEMES[key].name}</option>)}</select></label>
         {[1, 2].map((index) => <React.Fragment key={index}>
-          <label>custom {index} primária<input value={config[`custom_${index}_primaria`] || "#48abb3"} onChange={(e) => setConfig((current) => ({ ...current, [`custom_${index}_primaria`]: e.target.value }))} onBlur={() => saveSettings({ [`custom_${index}_primaria`]: config[`custom_${index}_primaria`] })} /></label>
-          <label>custom {index} secundária<input value={config[`custom_${index}_secundaria`] || "#0f2f33"} onChange={(e) => setConfig((current) => ({ ...current, [`custom_${index}_secundaria`]: e.target.value }))} onBlur={() => saveSettings({ [`custom_${index}_secundaria`]: config[`custom_${index}_secundaria`] })} /></label>
+          <label>custom {index} primária<input value={config[`custom_${index}_primaria`] || "#48abb3"} style={{ background: /^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(config[`custom_${index}_primaria`] || "#48abb3") ? config[`custom_${index}_primaria`] || "#48abb3" : "rgba(255,255,255,.08)" }} onChange={(e) => setConfig((current) => ({ ...current, [`custom_${index}_primaria`]: e.target.value }))} onBlur={() => saveSettings({ [`custom_${index}_primaria`]: config[`custom_${index}_primaria`] })} /></label>
+          <label>custom {index} secundária<input value={config[`custom_${index}_secundaria`] || "#0f2f33"} style={{ background: /^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(config[`custom_${index}_secundaria`] || "#0f2f33") ? config[`custom_${index}_secundaria`] || "#0f2f33" : "rgba(255,255,255,.08)" }} onChange={(e) => setConfig((current) => ({ ...current, [`custom_${index}_secundaria`]: e.target.value }))} onBlur={() => saveSettings({ [`custom_${index}_secundaria`]: config[`custom_${index}_secundaria`] })} /></label>
         </React.Fragment>)}
-        <label><input type="checkbox" checked={config.historico_clipboard_ativo !== false} onChange={(e) => onResizeConfig("historico_clipboard_ativo", e.target.checked)} /> histórico de clipboard</label>
-        <label><input type="checkbox" checked={!!config.imagem_deformavel} onChange={(e) => onResizeConfig("imagem_deformavel", e.target.checked)} /> deformar imagens livremente</label>
-        <label><input type="checkbox" checked={config.nota_flutuante_ativa !== false} onChange={(e) => onResizeConfig("nota_flutuante_ativa", e.target.checked)} /> nota flutuante</label>
-        <label><input type="checkbox" checked={config.relogio_ativo !== false} onChange={(e) => onResizeConfig("relogio_ativo", e.target.checked)} /> relógio</label>
+        <label className="bw-config-toggle"><input type="checkbox" checked={config.historico_clipboard_ativo !== false} onChange={(e) => onResizeConfig("historico_clipboard_ativo", e.target.checked)} /> histórico de clipboard</label>
+        <label className="bw-config-toggle"><input type="checkbox" checked={!!config.imagem_deformavel} onChange={(e) => onResizeConfig("imagem_deformavel", e.target.checked)} /> deformar imagens livremente</label>
+        <label className="bw-config-toggle"><input type="checkbox" checked={config.nota_flutuante_ativa !== false} onChange={(e) => onResizeConfig("nota_flutuante_ativa", e.target.checked)} /> nota flutuante</label>
+        <label className="bw-config-toggle"><input type="checkbox" checked={config.relogio_ativo !== false} onChange={(e) => onResizeConfig("relogio_ativo", e.target.checked)} /> relógio</label>
       </div>}
 
       {context && <div className="bw-context-menu" style={{ left: context.x, top: context.y }} onClick={(e) => e.stopPropagation()}>
         {contextNode && <>
           <button onClick={() => enterEdit(contextNode.id)}>MODIFICAR TEXTO</button>
           <button onClick={() => { copySelectionForNode(contextNode); setContext(null); }}>COPIAR</button>
+          {clipboard[0] && <button onClick={() => { pasteItem(clipboard[0]); setContext(null); }}>COLAR</button>}
           <button onClick={() => removeNode(contextNode.id)}>EXCLUIR</button>
           {contextNode.type === "TEXT" && <div className="bw-color-grid">{["default", "green", "yellow", "red", "white", "transparent"].map((color) => <button key={color} title={color} style={{ background: color === "default" ? theme.primary : color === "green" ? "#34d46a" : color === "yellow" ? "#f1d44b" : color === "red" ? "#f05252" : color === "white" ? "#fff" : "rgba(255,255,255,.3)" }} onClick={() => { updateNodeData(contextNode.id, { textColor: color }); setContext(null); }} />)}</div>}
           {contextNode.type === "IMAGE" && <>
@@ -1106,15 +1175,14 @@ export default function MapEditor({ mapa, config: initialConfig }) {
           <button onClick={() => enterEdgeEdit(contextEdge.id)}>MODIFICAR TEXTO</button>
           <button onClick={() => updateEdgeVisualType(contextEdge.id, ({ solid: "dotted", dotted: "arrow", arrow: "solid" })[contextEdge.visualType || "solid"])}>ESTILO: {{ solid: "LINHA", dotted: "PONTILHADO", arrow: "SETA" }[contextEdge.visualType || "solid"]} · ALTERNAR</button>
           <button onClick={() => { copyEdge(contextEdge); setContext(null); }}>COPIAR</button>
+          {clipboard[0] && <button onClick={() => { pasteItem(clipboard[0]); setContext(null); }}>COLAR</button>}
           <button onClick={() => removeEdge(contextEdge.id)}>EXCLUIR</button>
         </>}
         {context?.general && <>
-          {hasSelection && <>
-            <button onClick={() => { copySelection(); setContext(null); }}>COPIAR SELEÇÃO</button>
-            <button onClick={() => { deleteSelected(); setContext(null); }}>EXCLUIR SELEÇÃO</button>
-          </>}
+          {(hasSelection || hasFocusedNode) && <button onClick={() => { copySelection(); setContext(null); }}>{hasSelection ? "COPIAR SELEÇÃO" : "COPIAR NÓ"}</button>}
+          {hasSelection && <button onClick={() => { deleteSelected(); setContext(null); }}>EXCLUIR SELEÇÃO</button>}
           <button onClick={() => { createNode("TEXT", rf.screenToFlowPosition({ x: context.x, y: context.y })); setContext(null); }}>CRIAR NÓ</button>
-          <button onClick={() => { if (clipboard[0]) pasteItem(clipboard[0]); setContext(null); }}>COLAR</button>
+          {clipboard[0] && <button onClick={() => { pasteItem(clipboard[0]); setContext(null); }}>COLAR</button>}
           <button onClick={() => { setContext(null); openSearch(); }}>PESQUISAR</button>
         </>}
       </div>}
@@ -1131,6 +1199,7 @@ export default function MapEditor({ mapa, config: initialConfig }) {
             ...node.data,
             editing: editingNodeId === node.id,
             searchMatch: searchSelection?.nodeId === node.id ? searchSelection : null,
+            editSelection: editSearchSelection?.nodeId === node.id ? editSearchSelection : null,
             imageDeformable: !!config.imagem_deformavel,
             onChange: updateNodeData,
             onResize: resizeNode,
@@ -1150,14 +1219,12 @@ export default function MapEditor({ mapa, config: initialConfig }) {
         onPaneClick={paneClick}
         onPaneDoubleClick={(e) => {
           e.preventDefault();
-          if (e.nativeEvent?.pointerType === "touch" || "ontouchstart" in window) {
-            setMobileSelection({ start: { x: e.clientX, y: e.clientY }, current: { x: e.clientX, y: e.clientY }, phase: "armed" });
-            setNodes((current) => current.map((node) => ({ ...node, selected: false })));
-          } else {
-            rf.fitView({ duration: 250, padding: 0.1 });
-          }
+          if (lastPointerTypeRef.current !== "touch") rf.fitView({ duration: 250, padding: 0.1 });
         }}
-        onPaneContextMenu={(e) => e.preventDefault()}
+        onPaneContextMenu={(e) => {
+          e.preventDefault();
+          if (lastPointerTypeRef.current !== "touch" && !dragSelect) setContext({ x: Math.max(8, Math.min(e.clientX, window.innerWidth - 210)), y: Math.max(8, Math.min(e.clientY, window.innerHeight - 250)), general: true });
+        }}
         onNodeDragStart={beginTransaction}
         onNodeDragStop={finishTransaction}
         onEdgeDoubleClick={(e, edge) => { e.stopPropagation(); enterEdgeEdit(edge.id); }}
@@ -1166,7 +1233,7 @@ export default function MapEditor({ mapa, config: initialConfig }) {
         elementsSelectable
         nodesConnectable
         nodesDraggable
-        connectionRadius={28}
+        connectionRadius={window.matchMedia("(max-width: 600px)").matches ? 58 : 36}
         minZoom={0.02}
         maxZoom={4}
         panOnDrag={!mobileSelection}

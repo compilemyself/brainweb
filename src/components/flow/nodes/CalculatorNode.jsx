@@ -2,12 +2,12 @@ import React from "react";
 import { NodeResizer } from "reactflow";
 import Handles from "./Handles";
 
-const CALCULATOR_WIDTH = 219;
-const CALCULATOR_HEIGHT = 302;
+const CALCULATOR_WIDTH = 210;
+const CALCULATOR_HEIGHT = 309;
 
 export default function CalculatorNode({ id, data }) {
   const editing = !!data.editing;
-  const width = Number(data.width) || 260;
+  const width = Number(data.width) || CALCULATOR_WIDTH;
   const height = Number(data.height) || Math.round(width * CALCULATOR_HEIGHT / CALCULATOR_WIDTH);
 
   return (
@@ -28,13 +28,14 @@ export default function CalculatorNode({ id, data }) {
         />
       )}
       <Handles />
-      {editing && <div className="node-drag-handle bw-node-dragbar">editar</div>}
+      <div className="node-drag-handle bw-node-dragbar bw-calculator-drag-top">editar</div>
       <iframe
         title="Calculadora"
         src="https://calculator-1.com/outdoor/?f=dedede&r=ffffff"
         scrolling="no"
         frameBorder="0"
       />
+      <div className="bw-calculator-drag-bottom" />
       <a
         className="bw-calculator-link"
         href="https://calculator-1.com/"

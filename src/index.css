@@ -164,11 +164,12 @@ select {
 }
 
 .bw-markdown {
+  position: relative;
   height: 100%;
   overflow: auto;
   font-size: 16px;
   line-height: 22px;
-  white-space: normal;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
@@ -176,6 +177,27 @@ select {
   color: #d9f4ff;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.bw-text-visual-caret {
+  position: absolute;
+  width: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  pointer-events: none;
+  z-index: 5;
+  animation: bw-caret-blink 1s steps(2, start) infinite;
+}
+
+@keyframes bw-caret-blink {
+  to { visibility: hidden; }
+}
+
+.bw-search-hit {
+  color: #161616;
+  background: #ffe36a;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(255, 227, 106, 0.35);
 }
 
 .bw-md-line {
@@ -369,7 +391,7 @@ select {
   z-index: 25;
   border-radius: 50% / 100%;
   background: var(--bw-accent);
-  border: 2px solid rgba(255,255,255,.55);
+  border: 0;
 }
 
 .bw-embed-drag-bottom {
@@ -381,7 +403,7 @@ select {
   z-index: 25;
   border-radius: 50% / 100%;
   background: var(--bw-accent);
-  border: 2px solid rgba(255,255,255,.55);
+  border: 0;
   cursor: grab;
   touch-action: none;
 }
@@ -415,23 +437,54 @@ select {
 .bw-calculator-node {
   align-items: center;
   overflow: visible;
-  aspect-ratio: 219 / 302;
+  border: 0;
+  border-radius: 30px / 16px;
+  aspect-ratio: 210 / 309;
+}
+
+.bw-calculator-drag-top,
+.bw-calculator-drag-bottom {
+  position: absolute;
+  left: 3%;
+  right: 3%;
+  height: 22px;
+  z-index: 25;
+  border-radius: 50% / 100%;
+  background: var(--bw-accent);
+  border: 0;
+  cursor: grab;
+  touch-action: none;
+}
+
+.bw-calculator-drag-top {
+  top: 0;
+  min-height: 22px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+}
+
+.bw-calculator-drag-bottom {
+  bottom: 0;
 }
 
 .bw-calculator-node .bw-node-dragbar {
   position: absolute;
-  top: 6px;
-  left: 6px;
-  right: 6px;
-  z-index: 15;
+  top: 0;
+  left: 3%;
+  right: 3%;
+  z-index: 25;
+  height: 22px;
+  min-height: 22px;
+  border-radius: 50% / 100%;
+  background: var(--bw-accent);
 }
 
 .bw-calculator-node iframe {
   position: absolute;
   z-index: 1;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  inset: 22px 4px;
+  width: calc(100% - 8px);
+  height: calc(100% - 44px);
   display: block;
   border: 0;
   border-radius: 6px;
@@ -441,8 +494,8 @@ select {
   position: absolute;
   left: 5px;
   right: 5px;
-  bottom: 4px;
-  z-index: 3;
+  bottom: 25px;
+  z-index: 26;
   font-size: 9px;
   color: #fff;
   text-decoration: underline;
@@ -632,7 +685,7 @@ select {
   max-height: calc(100vh - 90px);
   overflow: auto;
   display: grid;
-  gap: 9px;
+  gap: 0;
   padding: 12px;
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 10px;
@@ -643,7 +696,23 @@ select {
 .bw-config-panel label {
   display: grid;
   gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   font-size: 12px;
+}
+
+.bw-config-panel .bw-config-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+}
+
+.bw-config-panel .bw-config-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  margin: 0;
 }
 
 .bw-config-panel input:not([type="checkbox"]),
