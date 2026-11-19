@@ -85,7 +85,7 @@ export function MarkdownLine({ line, editing = false, lineIndex, lineStart = 0, 
           disabled={editing}
           onChange={(e) => onToggleChecklist?.(lineIndex, e.target.checked)}
         />
-        <span>{checklist[2] ? inline(checklist[2], textStart, highlight) : <span data-source-start={textStart} data-source-end={textStart}>\u200b</span>}</span>
+        <span>{checklist[2] ? inline(checklist[2], textStart, highlight) : <span data-source-start={textStart} data-source-end={textStart}>{"\u200b"}</span>}</span>
       </div>
     );
   }
@@ -102,5 +102,5 @@ export function MarkdownLine({ line, editing = false, lineIndex, lineStart = 0, 
   if (content.startsWith(">")) return <div className={`${classes} bw-md-green`}>{inline(content, contentStart, highlight)}</div>;
   if (content.startsWith("<")) return <div className={`${classes} bw-md-red`}>{inline(content, contentStart, highlight)}</div>;
   if (content.startsWith("-")) return <div className={`${classes} bw-md-gray`}>{inline(content, contentStart, highlight)}</div>;
-  return <div className={classes}>{content ? inline(content, contentStart, highlight) : <span data-source-start={contentStart} data-source-end={contentStart}>\u200b</span>}</div>;
+  return <div className={classes}>{content ? inline(content, contentStart, highlight) : <span data-source-start={contentStart} data-source-end={contentStart}>{"\u200b"}</span>}</div>;
 }

@@ -355,6 +355,17 @@ select {
   padding-left: 36px;
 }
 
+.bw-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bw-inline-delete:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .bw-inline-delete,
 .bw-add-item {
   border: 0;
@@ -439,7 +450,7 @@ select {
   overflow: visible;
   border: 0;
   border-radius: 30px / 16px;
-  aspect-ratio: 210 / 309;
+  aspect-ratio: 227 / 346;
 }
 
 .bw-calculator-drag-top,
@@ -482,9 +493,11 @@ select {
 .bw-calculator-node iframe {
   position: absolute;
   z-index: 1;
-  inset: 22px 4px;
-  width: calc(100% - 8px);
-  height: calc(100% - 44px);
+  top: 22px;
+  left: 4px;
+  width: 219px;
+  height: 302px;
+  transform-origin: top left;
   display: block;
   border: 0;
   border-radius: 6px;

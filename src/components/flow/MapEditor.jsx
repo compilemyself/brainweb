@@ -62,7 +62,7 @@ function initialData(type) {
   if (type === "CHECKLIST") return { width: 280, height: 220, items: [{ id: uid("item"), label: "Novo item", checked: false, level: 0 }] };
   if (type === "IMAGE") return { width: 240, height: 180, label: "Imagem", src: "" };
   if (type === "EMBED") return { width: 420, height: 300, url: "" };
-  if (type === "CALCULATOR") return { width: 210, height: 309 };
+  if (type === "CALCULATOR") return { width: 227, height: 346 };
   return { width: 240, height: 170, label: "Novo texto" };
 }
 

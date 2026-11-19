@@ -2,13 +2,20 @@ import React from "react";
 import { NodeResizer } from "reactflow";
 import Handles from "./Handles";
 
-const CALCULATOR_WIDTH = 210;
-const CALCULATOR_HEIGHT = 309;
+// Tamanho nativo do embed da calculadora (API) e margens do node ao redor dele.
+const FRAME_WIDTH = 219;
+const FRAME_HEIGHT = 302;
+const FRAME_MARGIN_X = 8;
+const FRAME_MARGIN_Y = 44;
+const CALCULATOR_WIDTH = FRAME_WIDTH + FRAME_MARGIN_X;
+const CALCULATOR_HEIGHT = FRAME_HEIGHT + FRAME_MARGIN_Y;
 
 export default function CalculatorNode({ id, data }) {
   const editing = !!data.editing;
   const width = Number(data.width) || CALCULATOR_WIDTH;
   const height = Number(data.height) || Math.round(width * CALCULATOR_HEIGHT / CALCULATOR_WIDTH);
+  const scale = Math.min((width - FRAME_MARGIN_X) / FRAME_WIDTH, (height - FRAME_MARGIN_Y) / FRAME_HEIGHT);
+  const frameLeft = FRAME_MARGIN_X / 2 + ((width - FRAME_MARGIN_X) - FRAME_WIDTH * scale) / 2;
 
   return (
     <div
@@ -19,7 +26,7 @@ export default function CalculatorNode({ id, data }) {
         <NodeResizer
           isVisible
           minWidth={140}
-          minHeight={194}
+          minHeight={213}
           keepAspectRatio
           handleStyle={{ opacity: 0 }}
           onResizeStart={() => data.onResizeStart?.()}
@@ -34,6 +41,7 @@ export default function CalculatorNode({ id, data }) {
         src="https://calculator-1.com/outdoor/?f=dedede&r=ffffff"
         scrolling="no"
         frameBorder="0"
+        style={{ left: frameLeft, transform: `scale(${scale})` }}
       />
       <div className="bw-calculator-drag-bottom" />
       <a

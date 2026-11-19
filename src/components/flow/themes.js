@@ -7,7 +7,7 @@ export const THEMES = {
   MUD: { name: "MUD", primary: "#d3a373", secondary: "#7c97af" },
   BASIC: { name: "BASIC", primary: "#e6ce9980", secondary: "#947e704b" }, 
   SPAWN: { name: "SPAWN", primary: "#b34747", secondary: "#1F1F1F" },
-  PANTHERESS: { name: "PANTHERESS", primary: "#ff97b7f3", secondary: "#ecb3cf" },
+  PANTHERESS: { name: "PANTHERESS", primary: "#eea1cd", secondary: "#f9cee7" },
   JM: { name: "JM", primary: "#8d47b3", secondary: "#C369B6" },
   EVA: { name: "EVA", primary: "#adf309", secondary: "#674094" },
   DAWN: { name: "DAWN", primary: "#4768b3", secondary: "#9e9bccea" },

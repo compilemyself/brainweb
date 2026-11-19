@@ -118,11 +118,15 @@ export default function TextNode({ id, data }) {
       caretLeft = rect.right;
     }
 
+    // getBoundingClientRect devolve valores já multiplicados pelo zoom do React Flow,
+    // enquanto o cursor é posicionado em px "locais" do node: converte de volta.
     const rootRect = root.getBoundingClientRect();
+    const scaleX = root.offsetWidth ? rootRect.width / root.offsetWidth : 1;
+    const scaleY = root.offsetHeight ? rootRect.height / root.offsetHeight : 1;
     setVisualCaret({
-      left: caretLeft - rootRect.left,
-      top: rect.top - rootRect.top,
-      height: rect.height || 22
+      left: (caretLeft - rootRect.left) / (scaleX || 1) + root.scrollLeft,
+      top: (rect.top - rootRect.top) / (scaleY || 1) + root.scrollTop,
+      height: (rect.height || 22 * scaleY) / (scaleY || 1)
     });
   }, [editing]);
 

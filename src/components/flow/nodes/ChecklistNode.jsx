@@ -72,6 +72,12 @@ export default function ChecklistNode({ id: nodeId, data }) {
     setFocusId(previous.id);
   };
 
+  const changeLevel = (item, level) => {
+    const input = inputRefs.current[item.id];
+    selectionRef.current = { id: item.id, start: input?.selectionStart ?? 0, end: input?.selectionEnd ?? 0 };
+    change(item, { level });
+  };
+
   const insertAfter = (item, level = item.level || 0) => {
     const index = list.findIndex((x) => x.id === item.id);
     const newId = uid();
@@ -206,7 +212,13 @@ export default function ChecklistNode({ id: nodeId, data }) {
                 <span>{renderLabel(item, itemIndex)}</span>
               )}
               {editing && (
-                <button type="button" className="nodrag bw-inline-delete" onClick={() => remove(item)}>×</button>
+                <span className="bw-item-actions">
+                  {level > 0 && (
+                    <button type="button" className="nodrag bw-inline-delete" title="Remover indentação" onClick={() => changeLevel(item, level - 1)}>&lt;</button>
+                  )}
+                  <button type="button" className="nodrag bw-inline-delete" title="Adicionar indentação" disabled={level >= 2} onClick={() => changeLevel(item, level + 1)}>&gt;</button>
+                  <button type="button" className="nodrag bw-inline-delete" onClick={() => remove(item)}>×</button>
+                </span>
               )}
             </label>
           );
