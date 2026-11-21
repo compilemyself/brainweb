@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { NodeResizer } from "reactflow";
+import NodeResizeControls from "./NodeResizeControls";
 import Handles from "./Handles";
 
 function uid() {
@@ -8,7 +8,7 @@ function uid() {
 
 function normalize(data) {
   if (Array.isArray(data.items) && data.items.length) return data.items;
-  return [{ id: "legacy", label: data.label || "Novo item", checked: !!data.checked, level: 0 }];
+  return [{ id: "legacy", label: data.label || "", checked: !!data.checked, level: 0 }];
 }
 
 const PAIRS = { "(": ")", "{": "}", "[": "]", "'": "'", '"': '"' };
@@ -47,6 +47,7 @@ export default function ChecklistNode({ id: nodeId, data }) {
 
   const renderLabel = (item, index) => {
     const match = data.searchMatch;
+    if (!item.label && list.length === 1) return <span className="bw-placeholder-inline">Digite aqui</span>;
     const text = item.label || "\u00a0";
     if (!match || match.type !== "CHECKLIST" || match.itemIndex !== index) return text;
     const start = Math.max(0, match.index);
@@ -162,15 +163,7 @@ export default function ChecklistNode({ id: nodeId, data }) {
       }}
     >
       {editing && (
-        <NodeResizer
-          isVisible
-          minWidth={150}
-          minHeight={110}
-          handleStyle={{ opacity: 0 }}
-          onResizeStart={() => data.onResizeStart?.()}
-          onResize={(_, p) => data.onResize?.(nodeId, { width: Math.round(p.width), height: Math.round(p.height) })}
-          onResizeEnd={() => data.onResizeEnd?.()}
-        />
+        <NodeResizeControls id={nodeId} data={data} width={Number(data.width) || 260} height={Number(data.height) || 220} minWidth={150} minHeight={110} />
       )}
       <Handles />
       {editing && <div className="node-drag-handle bw-node-dragbar">editar</div>}
@@ -196,6 +189,7 @@ export default function ChecklistNode({ id: nodeId, data }) {
                   }}
                   className="nodrag"
                   value={item.label || ""}
+                  placeholder="Digite aqui"
                   onChange={(e) => change(item, { label: e.target.value })}
                   onKeyDown={(e) => keyDown(e, item, level)}
                   style={{

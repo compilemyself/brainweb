@@ -1,5 +1,5 @@
 import React from "react";
-import { NodeResizer } from "reactflow";
+import NodeResizeControls from "./NodeResizeControls";
 import Handles from "./Handles";
 
 // Tamanho nativo do embed da calculadora (API) e margens do node ao redor dele.
@@ -23,16 +23,7 @@ export default function CalculatorNode({ id, data }) {
       style={{ width, height, padding: 0, background: "var(--bw-accent,#48abb3)" }}
     >
       {editing && (
-        <NodeResizer
-          isVisible
-          minWidth={140}
-          minHeight={213}
-          keepAspectRatio
-          handleStyle={{ opacity: 0 }}
-          onResizeStart={() => data.onResizeStart?.()}
-          onResize={(_, p) => data.onResize?.(id, { width: Math.round(p.width), height: Math.round(p.height) })}
-          onResizeEnd={() => data.onResizeEnd?.()}
-        />
+        <NodeResizeControls id={id} data={data} width={width} height={height} minWidth={140} minHeight={213} keepAspectRatio />
       )}
       <Handles />
       <div className="node-drag-handle bw-node-dragbar bw-calculator-drag-top">editar</div>

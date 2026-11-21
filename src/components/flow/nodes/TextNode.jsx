@@ -1,5 +1,5 @@
 import React, { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { NodeResizer } from "reactflow";
+import NodeResizeControls from "./NodeResizeControls";
 import Handles from "./Handles";
 import { MarkdownLine } from "../markdown";
 
@@ -118,8 +118,6 @@ export default function TextNode({ id, data }) {
       caretLeft = rect.right;
     }
 
-    // getBoundingClientRect devolve valores já multiplicados pelo zoom do React Flow,
-    // enquanto o cursor é posicionado em px "locais" do node: converte de volta.
     const rootRect = root.getBoundingClientRect();
     const scaleX = root.offsetWidth ? rootRect.width / root.offsetWidth : 1;
     const scaleY = root.offsetHeight ? rootRect.height / root.offsetHeight : 1;
@@ -282,19 +280,12 @@ export default function TextNode({ id, data }) {
       style={{ ...size, padding: editing ? 10 : 12, background: COLORS[data.textColor] || COLORS.default, color: whiteText ? "#111" : "#fff" }}
     >
       {editing && (
-        <NodeResizer
-          isVisible
-          minWidth={120}
-          minHeight={84}
-          handleStyle={{ opacity: 0 }}
-          onResizeStart={() => data.onResizeStart?.()}
-          onResize={(_, p) => data.onResize?.(id, { width: Math.round(p.width), height: Math.round(p.height) })}
-          onResizeEnd={() => data.onResizeEnd?.()}
-        />
+        <NodeResizeControls id={id} data={data} width={size.width} height={size.height} minWidth={120} minHeight={84} />
       )}
       <Handles />
       {editing && <div className="node-drag-handle bw-node-dragbar">editar</div>}
       <div style={{ position: "relative", flex: 1, minHeight: 0, overflow: "hidden" }}>
+        {!label && <div className="bw-placeholder" aria-hidden="true">Digite aqui</div>}
         <div ref={highlightedRef} className="bw-markdown" aria-hidden="true">
           {renderedLines}
           {editing && visualCaret && <span className="bw-text-visual-caret" style={{ left: visualCaret.left, top: visualCaret.top, height: visualCaret.height }} />}

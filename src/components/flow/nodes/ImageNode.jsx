@@ -1,5 +1,5 @@
 import React from "react";
-import { NodeResizer } from "reactflow";
+import NodeResizeControls from "./NodeResizeControls";
 import Handles from "./Handles";
 
 export default function ImageNode({ id, data }) {
@@ -22,16 +22,7 @@ export default function ImageNode({ id, data }) {
       }}
     >
       {editing && (
-        <NodeResizer
-          isVisible
-          minWidth={40}
-          minHeight={40}
-          keepAspectRatio={!freeResize}
-          handleStyle={{ opacity: 0 }}
-          onResizeStart={() => data.onResizeStart?.()}
-          onResize={(_, p) => data.onResize?.(id, { width: Math.round(p.width), height: Math.round(p.height) })}
-          onResizeEnd={() => data.onResizeEnd?.()}
-        />
+        <NodeResizeControls id={id} data={data} width={width} height={height} minWidth={40} minHeight={40} keepAspectRatio={!freeResize} />
       )}
       <Handles />
       {editing && <div className="node-drag-handle bw-node-dragbar">editar</div>}

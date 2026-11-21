@@ -1,5 +1,5 @@
 import React from "react";
-import { NodeResizer } from "reactflow";
+import NodeResizeControls from "./NodeResizeControls";
 import Handles from "./Handles";
 
 function embed(url) {
@@ -48,14 +48,14 @@ export default function EmbedNode({ id, data }) {
       style={{ width, height, padding: 0, background: "var(--bw-accent,#48abb3)" }}
     >
       {editing && (
-        <NodeResizer
-          isVisible
+        <NodeResizeControls
+          id={id}
+          data={data}
+          width={width}
+          height={height}
           minWidth={220}
           minHeight={124}
-          handleStyle={{ opacity: 0 }}
-          onResizeStart={() => data.onResizeStart?.()}
-          onResize={(_, p) => data.onResize?.(id, { width: Math.round(p.width), height: resolved?.type === "youtube" ? Math.round((Math.round(p.width) - 8) * 9 / 16 + 44) : Math.round(p.height) })}
-          onResizeEnd={() => data.onResizeEnd?.()}
+          heightFromWidth={resolved?.type === "youtube" ? (nextWidth) => (Math.round(nextWidth) - 8) * 9 / 16 + 44 : undefined}
         />
       )}
       <Handles />
